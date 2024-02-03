@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${DEPLOY_ENV}-ar-web-fe-deployment
+  namespace: ar-web-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${DEPLOY_ENV}-ar-web-fe
+  template:
+    metadata:
+      labels:
+        app: ${DEPLOY_ENV}-ar-web-fe
+    spec:
+      containers:
+      - name: ${DEPLOY_ENV}-ar-web-fe
+        image: limitlesssoft/ar-web-fe:${DEPLOY_ENV}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+      imagePullSecrets:
+      - name: regcred
