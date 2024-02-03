@@ -1,0 +1,1 @@
+export { BottomIcons } from './ui/BottomIcons'

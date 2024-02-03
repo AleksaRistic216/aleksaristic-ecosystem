@@ -1,0 +1,33 @@
+{
+  "name": "aleksa-ristic-fe",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.15.6",
+    "@mui/material": "^5.15.6",
+    "@react-three/fiber": "^8.15.15",
+    "next": "14.1.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-toastify": "^10.0.4",
+    "react-use-cookie": "^1.4.0",
+    "three": "^0.160.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/three": "^0.160.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.1.0",
+    "typescript": "^5"
+  }
+}
