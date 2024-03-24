@@ -1,9 +1,8 @@
 import { BottomIcons } from "@/widgets/Explore/BottomIcons"
 import { InfoCard } from "@/widgets/Explore/InfoCard"
-import { ScrollDownHelper } from "@/widgets/Explore/ScrollDownHelper"
 import { WelcomeMessage } from "@/widgets/Explore/WelcomeMessage"
 import { Layout } from "@/widgets/Layout"
-import { Grid } from "@mui/material"
+import { Grid, Typography } from "@mui/material"
 import { useEffect, useState } from "react"
 
 const Explore = (): JSX.Element => {
@@ -33,14 +32,26 @@ const Explore = (): JSX.Element => {
         <Layout>
             <Grid
                 container
+                px={2}
                 justifyContent={`center`}
                 style={{
                     overflowY:  `scroll`,
                     height: `2100px !important`,
-                    paddingBottom: `12vh`
+                    paddingBottom: `12vh`,
                 }}>
                 { isWelcomeMessageVisible ? <WelcomeMessage></WelcomeMessage> : null }
                 { showOthers ? <InfoCard></InfoCard> : null }
+                {
+                    showOthers ? 
+                        <Grid sx={{
+                            my: 5
+                        }}>
+                            <Typography>
+                                Browse my open-source projects through the top menu
+                            </Typography>
+                        </Grid>
+                    : null
+                }
             </Grid>
             { showOthers && allowScroll ? <BottomIcons></BottomIcons> : null }
         </Layout>

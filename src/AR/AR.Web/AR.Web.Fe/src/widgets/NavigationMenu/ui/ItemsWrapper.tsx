@@ -1,17 +1,22 @@
 import { Grid, styled } from "@mui/material"
 import { Item } from "./Item"
-import { DarkMode, LightMode } from "@mui/icons-material"
+import { Book, DarkMode, Explore, GitHub, LightMode } from "@mui/icons-material"
 import { toast } from "react-toastify"
 import { IItemsWrapperProps } from "../models/IItemsWrapperProps"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/router"
 
 export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
 
+    const router = useRouter()
     const [marginTop, setMarginTop] = useState(-100)
 
     const ItemsWrapperStyled = styled(Grid)(
         ({ theme }) => `
-            margin-top: ${marginTop}px;
+            position: relative;
+            margin-top: ${marginTop}%;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
         `)
 
     props.innerRef.current = {
@@ -19,10 +24,13 @@ export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
             if(marginTop < 0)
             {
                 setMarginTop((prev) => prev + 1)
-                for(var i = 0; i < 100; i++)
+                const speed = 1
+                for(var i = 0; i < 100 * speed; i++)
+                {
                     setTimeout(() => {
-                        setMarginTop((prev) => prev + 1)
-                    }, i * 2)
+                        setMarginTop((prev) => prev + (1 / speed))
+                    }, i)
+                }
             }
         }
     }
@@ -32,19 +40,36 @@ export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
             container
             justifyContent={`center`}>
             <Item
-                icon={<span>{props.isShown.toString()}</span>}
+                icon={<Explore />}
+                text={`Explore`}
                 onClick={() => {
-                    toast.warning(`Dark mode is not available yet`)
+                    router.push(`/explore`)
+                }}>
+            </Item>
+            <Item
+                icon={<GitHub />}
+                text={`My projects`}
+                onClick={() => {
+                    router.push(`/projects`)
+                }}>
+            </Item>
+            <Item
+                icon={<Book />}
+                text={`Blog`}
+                onClick={() => {
+                    router.push(`/blog`)
                 }}>
             </Item>
             <Item
                 icon={<DarkMode />}
+                text={`Dark mode`}
                 onClick={() => {
                     toast.warning(`Dark mode is not available yet`)
                 }}>
             </Item>
             <Item
                 icon={<LightMode />}
+                text={`Light mode`}
                 onClick={() => {
                     toast.warning(`Light mode is not available yet`)
                 }}>

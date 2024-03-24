@@ -1,6 +1,7 @@
 import { Box, Grid, Paper, Typography, styled } from "@mui/material"
 import { useEffect, useState } from "react"
 import { ScrollDownHelper } from "../../ScrollDownHelper"
+import { WhatsApp } from "@mui/icons-material"
 
 export const InfoCard = (): JSX.Element => {
 
@@ -27,6 +28,12 @@ export const InfoCard = (): JSX.Element => {
             }
         `
     ))
+
+    const currentDate = new Date()
+    const emplyedFor = new Date(2023, 1, 9)
+    const diff = Math.floor((currentDate.valueOf() - emplyedFor.valueOf()) / 1000 / 60 / 60 / 24)
+    const diffYears = Math.floor(diff / 365)
+    const diffMonths = Math.floor((diff - (diffYears * 365)) / 30.5)
 
     return (
         <Grid
@@ -59,8 +66,23 @@ export const InfoCard = (): JSX.Element => {
                         </ItemStyled>
 
                         <ItemStyled>
-                            <label>Position:</label>
+                            <label>Current position:</label>
                             <span>Back-end developer</span>
+                        </ItemStyled>
+
+                        <ItemStyled>
+                            <label>Since last job change:</label>
+                            <span>{diffYears} years & {diffMonths} months</span>
+                        </ItemStyled>
+
+                        <ItemStyled>
+                            <label>Contact email:</label>
+                            <span>aristiccitsira@gmail.com</span>
+                        </ItemStyled>
+
+                        <ItemStyled>
+                            <label>Contact phone:</label>
+                            <span>+381 69 369 1472 <WhatsApp /></span>
                         </ItemStyled>
                 </Paper>
         </Grid>

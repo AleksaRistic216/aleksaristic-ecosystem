@@ -28,11 +28,16 @@ export const WelcomeMessage = (): JSX.Element => {
     const borderWidth = `8px`
     const borderColor = `rgba(50, 50, 50, 1)`
 
+    const backgroundColor = `rgba(255, 255, 255, 1)`
+
     return (
         <WelcomeMessageStyled
             container
             direction={`row`}>
-            <Grid item>
+            <Grid item
+                sx={{
+                    backgroundColor: backgroundColor,
+                }}>
                 <Typography
                     padding={`15px`}
                     borderBottom={`${borderWidth} solid ${borderColor}`}
@@ -53,6 +58,7 @@ export const WelcomeMessage = (): JSX.Element => {
                                 borderTop: `${borderWidth} solid ${borderColor}`,
                                 paddingTop: `30vh`,
                                 transform: `translateY(-100%)`,
+                                backgroundColor: backgroundColor,
                             }}>
                                 <Typography
                                     position={`absolute`}
@@ -63,7 +69,7 @@ export const WelcomeMessage = (): JSX.Element => {
                                         mouse over notch to expose menu
                                 </Typography>
                             </Grid>
-                        Welcome to the Explore Page
+                        Welcome to my portfolio - Aleksa Ristić
                 </Typography>
             </Grid>
         </WelcomeMessageStyled>

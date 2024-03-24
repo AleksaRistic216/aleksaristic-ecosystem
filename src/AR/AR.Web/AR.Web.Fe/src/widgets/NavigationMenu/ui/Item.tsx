@@ -1,4 +1,4 @@
-import { Grid, styled } from "@mui/material"
+import { Grid, Typography, styled } from "@mui/material"
 import { IItemProps } from "../models/IItemProps"
 
 export const Item = (props: IItemProps): JSX.Element => {
@@ -10,6 +10,9 @@ export const Item = (props: IItemProps): JSX.Element => {
             &:hover {
                 cursor: pointer;
                 color: red;
+                -webkit-user-select: none; /* Safari */
+                -ms-user-select: none; /* IE 10 and IE 11 */
+                user-select: none; /* Standard syntax */
             }
         `)
 
@@ -20,6 +23,9 @@ export const Item = (props: IItemProps): JSX.Element => {
                 props.onClick()
             }}>
             {props.icon}
+            <Typography>
+                {props.text}
+            </Typography>
         </ItemStyled>
     )
 }

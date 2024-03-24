@@ -2,6 +2,8 @@ import NextIcon from '../assets/next-js-icon.png'
 import NetIcon from '../assets/net-icon.png'
 import AzureIcon from '../assets/azure-icon.png'
 import AwsIcon from '../assets/aws-icon.png'
+import FlutterIcon from '../assets/flutter-icon.png'
+import ExpressIcon from '../assets/express-icon.png'
 import { Avatar, Grid, Typography, styled } from '@mui/material'
 import { useEffect, useState } from 'react'
 
@@ -55,6 +57,12 @@ export const BottomIcons = (): JSX.Element => {
                         </IconStyled>
                         <IconStyled item>
                             <Avatar src={AwsIcon.src} />
+                        </IconStyled>
+                        <IconStyled item>
+                            <Avatar src={ExpressIcon.src} />
+                        </IconStyled>
+                        <IconStyled item>
+                            <Avatar src={FlutterIcon.src} />
                         </IconStyled>
                     </Grid>
                 </Grid>
