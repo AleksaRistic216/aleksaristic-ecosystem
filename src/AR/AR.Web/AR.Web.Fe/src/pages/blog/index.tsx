@@ -6,6 +6,7 @@ const Blog = (): JSX.Element => {
     return (
         <Layout>
             <Grid sx={{
+                maxWidth: `100vw`,
                 overflowY: `scroll`
             }}>
                 <BlogList />

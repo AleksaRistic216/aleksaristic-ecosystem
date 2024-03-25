@@ -9,7 +9,7 @@ import { useRouter } from "next/router"
 export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
 
     const router = useRouter()
-    const [marginTop, setMarginTop] = useState(-100)
+    const [marginTop, setMarginTop] = useState(-1000)
 
     const ItemsWrapperStyled = styled(Grid)(
         ({ theme }) => `
@@ -17,21 +17,23 @@ export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
             margin-top: ${marginTop}%;
             background-color: rgba(255, 255, 255, 0.5);
             border-radius: 10px;
-        `)
+
+            @media (max-width: 650px) {
+                width: 100vw;
+                background-color: rgba(255, 255, 255, 1);
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+
+                & > div {
+                    width: 100%;
+                }
+            }
+        `
+    )
 
     props.innerRef.current = {
         show: () => {
             if(marginTop < 0)
-            {
-                setMarginTop((prev) => prev + 1)
-                const speed = 1
-                for(var i = 0; i < 100 * speed; i++)
-                {
-                    setTimeout(() => {
-                        setMarginTop((prev) => prev + (1 / speed))
-                    }, i)
-                }
-            }
+                setMarginTop(0)
         }
     }
 

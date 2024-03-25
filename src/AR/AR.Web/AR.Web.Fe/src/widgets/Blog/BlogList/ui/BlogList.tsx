@@ -7,7 +7,8 @@ export const BlogList = (): JSX.Element => {
         <Grid
             container
             justifyContent={`center`}
-            py={15}>
+            py={15}
+            maxWidth={`100vw`}>
             <Grid
                 item
                 sm={12}
