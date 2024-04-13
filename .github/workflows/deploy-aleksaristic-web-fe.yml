@@ -22,4 +22,5 @@ jobs:
         envsubst < k8s/services/ar-web-fe-service.yaml | kubectl apply -f -
         envsubst < k8s/deployments/ar-web-fe-deployment.yaml | kubectl apply -f -
         envsubst < k8s/ingress/ar-web-ingress.yaml | kubectl apply -f -
+        envsubst < k8s/ingress/root-ingress.yaml | kubectl apply -f -
         kubectl rollout restart -n ar-web-namespace deployment ${{ inputs.env }}-ar-web-fe-deployment

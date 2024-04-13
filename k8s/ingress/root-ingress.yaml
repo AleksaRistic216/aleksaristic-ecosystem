@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: root-ar-web-ingress
+  namespace: ar-web-namespace
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  - host: aleksaristic.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: production-ar-web-fe-service
+            port:
+              number: 80
