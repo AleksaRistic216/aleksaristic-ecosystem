@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: ${DEPLOY_ENV}-ar-web-fe
-        image: limitlesssoft/ar-web-fe:${DEPLOY_ENV}
+        image: limitlesssoft/aleksaristic-web-fe:${DEPLOY_ENV}
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
