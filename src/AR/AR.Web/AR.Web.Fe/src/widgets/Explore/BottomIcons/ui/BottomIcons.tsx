@@ -47,16 +47,16 @@ export const BottomIcons = (): JSX.Element => {
                         justifyContent={`center`}
                         alignContent={`end`}>
                         <IconStyled item>
-                            <Avatar src={NextIcon.src} />
-                        </IconStyled>
-                        <IconStyled item>
                             <Avatar src={NetIcon.src} />
                         </IconStyled>
                         <IconStyled item>
-                            <Avatar src={AzureIcon.src} />
+                            <Avatar src={AwsIcon.src} />
                         </IconStyled>
                         <IconStyled item>
-                            <Avatar src={AwsIcon.src} />
+                            <Avatar src={NextIcon.src} />
+                        </IconStyled>
+                        <IconStyled item>
+                            <Avatar src={AzureIcon.src} />
                         </IconStyled>
                         <IconStyled item>
                             <Avatar src={ExpressIcon.src} />
