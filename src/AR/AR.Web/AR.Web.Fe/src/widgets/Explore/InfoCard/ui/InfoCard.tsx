@@ -61,28 +61,13 @@ export const InfoCard = (): JSX.Element => {
                         </ItemStyled>
 
                         <ItemStyled>
-                            <label>Current employer:</label>
-                            <span>IT Labs</span>
-                        </ItemStyled>
-
-                        <ItemStyled>
-                            <label>Current position:</label>
-                            <span>Back-end developer</span>
-                        </ItemStyled>
-
-                        <ItemStyled>
-                            <label>Since last job change:</label>
-                            <span>{diffYears} years & {diffMonths} months</span>
-                        </ItemStyled>
-
-                        <ItemStyled>
                             <label>Contact email:</label>
                             <span>aristiccitsira@gmail.com</span>
                         </ItemStyled>
 
                         <ItemStyled>
                             <label>Contact phone:</label>
-                            <span>+381 69 369 1472 <WhatsApp /></span>
+                            <span>+381 69 369 1472 <WhatsApp sx={{ transform: `translate(5px, 5px)`}} /></span>
                         </ItemStyled>
                 </Paper>
         </Grid>

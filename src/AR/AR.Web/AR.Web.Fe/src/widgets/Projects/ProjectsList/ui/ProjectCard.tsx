@@ -10,7 +10,7 @@ export const ProjectCard = (props: IProjectCardProps): JSX.Element => {
                         sx={{
                             height: 140
                         }}
-                        image={PlaceholderImg.src} />
+                        image={ props.mediaSrc ?? PlaceholderImg.src} />
                     <CardContent>
                         <Typography
                             sx={{

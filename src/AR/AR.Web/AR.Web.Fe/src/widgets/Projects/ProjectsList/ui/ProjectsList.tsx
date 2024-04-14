@@ -1,4 +1,4 @@
-import { Card, Grid, LinearProgress, Typography } from "@mui/material"
+import { Grid, LinearProgress, Typography } from "@mui/material"
 import { ProjectCard } from "./ProjectCard"
 import { get, getDatabase, ref, set } from "firebase/database"
 import { firebaseApp } from "@/app/firebase"
@@ -63,6 +63,7 @@ export const ProjectsList = (): JSX.Element => {
                                 projects.map((project, index) => {
                                     return <ProjectCard
                                         key={index}
+                                        mediaSrc={project.mediaSrc}
                                         title={project.title}
                                         tags={project.tags} />
                                 })

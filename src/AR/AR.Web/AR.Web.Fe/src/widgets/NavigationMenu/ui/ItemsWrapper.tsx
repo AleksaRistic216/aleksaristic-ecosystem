@@ -62,7 +62,7 @@ export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
                     router.push(`/blog`)
                 }}>
             </Item>
-            <Item
+            {/* <Item
                 icon={<DarkMode />}
                 text={`Dark mode`}
                 onClick={() => {
@@ -75,7 +75,7 @@ export const ItemsWrapper = (props: IItemsWrapperProps): JSX.Element => {
                 onClick={() => {
                     toast.warning(`Light mode is not available yet`)
                 }}>
-            </Item>
+            </Item> */}
         </ItemsWrapperStyled>
     )
 }
