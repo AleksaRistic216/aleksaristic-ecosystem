@@ -15,7 +15,6 @@ export const ProjectsList = () => {
             .then((snapshot) => {
                 if (snapshot.exists()) {
                     setProjects(snapshot.val())
-                    console.log(snapshot.val())
                 } else {
                     console.log('No data available')
                 }
@@ -50,16 +49,27 @@ export const ProjectsList = () => {
                     {projects == null ? (
                         <LinearProgress />
                     ) : (
-                        projects.map((project, index) => {
-                            return (
-                                <ProjectCard
-                                    key={index}
-                                    mediaSrc={project.mediaSrc}
-                                    title={project.title}
-                                    tags={project.tags}
-                                />
-                            )
-                        })
+                        projects
+                            .toSorted((x, y) => {
+                                return (
+                                    (x.order === undefined
+                                        ? 999999
+                                        : parseInt(x.order)) -
+                                    (y.order === undefined
+                                        ? 999999
+                                        : parseInt(y.order))
+                                )
+                            })
+                            .map((project, index) => {
+                                return (
+                                    <ProjectCard
+                                        key={index}
+                                        mediaSrc={project.mediaSrc}
+                                        title={project.title}
+                                        tags={project.tags}
+                                    />
+                                )
+                            })
                     )}
                 </Grid>
             </Grid>
