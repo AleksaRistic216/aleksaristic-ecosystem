@@ -4,6 +4,7 @@ import AzureIcon from '../assets/azure-icon.png'
 import AwsIcon from '../assets/aws-icon.png'
 import FlutterIcon from '../assets/flutter-icon.png'
 import ExpressIcon from '../assets/express-icon.png'
+import K8s from '../assets/k8sIcon.png'
 import { Avatar, Grid, Typography, styled } from '@mui/material'
 import { useEffect, useState } from 'react'
 
@@ -22,8 +23,9 @@ export const BottomIcons = (): JSX.Element => {
 
     const IconStyled = styled(Grid)(
         ({ theme }) => `
-            padding: 10px;
+            padding: 10px 15px;
             opacity: ${opacity};
+            background-color: rgba(255, 255, 255, 0.8);
         `
     )
 
@@ -63,6 +65,9 @@ export const BottomIcons = (): JSX.Element => {
                     </IconStyled>
                     <IconStyled item>
                         <Avatar src={FlutterIcon.src} />
+                    </IconStyled>
+                    <IconStyled item>
+                        <Avatar src={K8s.src} />
                     </IconStyled>
                 </Grid>
             </Grid>
