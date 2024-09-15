@@ -5,7 +5,7 @@ WORKDIR /app
 COPY \
   src/AR/AR.Web/AR.Web.Fe/package.json \
   src/AR/AR.Web/AR.Web.Fe/package-lock.json* ./
-RUN npm ci
+RUN npm i --production
 
 FROM node:18-alpine AS builder
 WORKDIR /app
