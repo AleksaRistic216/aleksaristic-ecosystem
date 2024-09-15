@@ -24,6 +24,7 @@
     "three": "^0.160.1"
   },
   "devDependencies": {
+    "prettier": "^3.3.3",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
