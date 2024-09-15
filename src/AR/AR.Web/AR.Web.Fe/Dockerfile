@@ -3,9 +3,9 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY \
-  src/AR/AR.Web/AR.Web.Fe/package.json \
+  src/AR/AR.Web/AR.Web.Fe/package.json . \
   src/AR/AR.Web/AR.Web.Fe/package-lock.json* ./
-RUN npm i --production
+RUN npm i
 
 FROM node:18-alpine AS builder
 WORKDIR /app
