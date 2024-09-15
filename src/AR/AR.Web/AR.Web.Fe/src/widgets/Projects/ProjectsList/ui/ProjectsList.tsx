@@ -23,7 +23,7 @@ export const ProjectsList = () => {
                 console.error(error)
             })
     }, [])
-    
+
     return (
         <Grid
             container
@@ -38,8 +38,9 @@ export const ProjectsList = () => {
                 <Grid container justifyContent={`center`}>
                     <Grid item sm={6}>
                         <Typography textAlign={`center`} variant={`h6`} p={4}>
-                            Feel free to explore my open-source projects (the ones I can share publicly!) 
-                            to get a sense of my coding style and the technologies I work with.
+                            Feel free to explore my open-source projects (the
+                            ones I can share publicly!) to get a sense of my
+                            coding style and the technologies I work with.
                         </Typography>
                     </Grid>
                 </Grid>
@@ -63,10 +64,13 @@ export const ProjectsList = () => {
                             .map((project, index) => {
                                 return (
                                     <ProjectCard
+                                        description={project.description}
                                         key={index}
+                                        github={project.github}
                                         mediaSrc={project.mediaSrc}
                                         title={project.title}
                                         tags={project.tags}
+                                        images={project.images}
                                     />
                                 )
                             })

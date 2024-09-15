@@ -1,5 +1,8 @@
 export interface IProjectCardProps {
-    mediaSrc?: string,
-    title?: string,
-    tags?: string[],
+    description?: string
+    github?: string
+    mediaSrc?: string
+    title?: string
+    tags?: string[]
+    images?: string[]
 }
