@@ -9,12 +9,13 @@ on:
     
 jobs:
   build-and-push-web-fe:
+    environment: ${{ inputs.env }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
 
     - name: Build docker image
-      run: docker build --file src/AR/AR.Web/AR.Web.Fe/Dockerfile --build-arg="DEPLOY_ENV=${{ inputs.env }}" -t limitlesssoft/aleksaristic-web-fe:${{ inputs.env }} .
+      run: docker build --file src/AR/AR.Web/AR.Web.Fe/Dockerfile --build-arg="DEPLOY_ENV=${{ inputs.env }}" --build-arg="POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}" --build-arg="POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}" -t limitlesssoft/aleksaristic-web-fe:${{ inputs.env }} .
 
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v3
