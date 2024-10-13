@@ -7,7 +7,7 @@ import {
 } from 'three/examples/jsm/Addons.js'
 import { useRouter } from 'next/router'
 
-const NewPage = () => {
+const Index = () => {
     const router = useRouter()
     const [userInput, setUserInput] = useState('')
     const [font, setFont] = useState(null)
@@ -37,7 +37,7 @@ const NewPage = () => {
 
         switch (userInput) {
             case '1':
-                router.push('/')
+                router.push('/explore')
                 break
             case '2':
                 router.push('/projects')
@@ -100,6 +100,11 @@ const NewPage = () => {
 
     useEffect(() => {
         if (typeof window === 'undefined') {
+            return
+        }
+        
+        if (window.innerWidth < 900 || window.innerHeight < 600) {
+            router.push('/explore')
             return
         }
 
@@ -215,4 +220,4 @@ const NewPage = () => {
     return <></>
 }
 
-export default NewPage
+export default Index
