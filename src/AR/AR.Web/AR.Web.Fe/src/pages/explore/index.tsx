@@ -52,7 +52,7 @@ const Explore = (): JSX.Element => {
                     >
                         <Typography>
                             Browse my projects through the top menu and read
-                            pinned blog posts to learn more about me.
+                            blog posts to learn more about me.
                         </Typography>
                     </Grid>
                 ) : null}
