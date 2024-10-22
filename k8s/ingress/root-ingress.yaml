@@ -6,6 +6,10 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
 spec:
+  tls:
+    - hosts:
+        - aleksaristic.com
+      secretName: aleksaristic-tls
   rules:
   - host: aleksaristic.com
     http:
