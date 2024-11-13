@@ -1,5 +1,5 @@
 import { mainTheme } from '@/app/theme'
-import { ThemeProvider } from '@mui/material'
+import { Box, Stack, ThemeProvider, Typography } from '@mui/material'
 import { AppProps } from 'next/app'
 import { ToastContainer } from 'react-toastify'
 import './../app/globals.css'
@@ -38,8 +38,32 @@ export default function MyApp({ Component, pageProps }: AppProps) {
     return (
         <PostHogProvider client={posthog}>
             <ThemeProvider theme={mainTheme}>
-                <ToastContainer position={`top-right`} />
-                <Component {...pageProps} />
+                <Stack
+                    alignItems={`center`}
+                    justifyContent={`center`}
+                    sx={{
+                        height: `100vh`,
+                        display: {
+                            xs: 'grid',
+                            lg: 'none',
+                        },
+                    }}
+                >
+                    <Typography>
+                        This website is accessible only on PC
+                    </Typography>
+                </Stack>
+                <Stack
+                    sx={{
+                        display: {
+                            xs: 'none',
+                            lg: 'grid',
+                        },
+                    }}
+                >
+                    <ToastContainer position={`top-right`} />
+                    <Component {...pageProps} />
+                </Stack>
             </ThemeProvider>
         </PostHogProvider>
     )

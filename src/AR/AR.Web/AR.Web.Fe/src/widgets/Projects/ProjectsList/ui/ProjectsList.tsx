@@ -38,9 +38,7 @@ export const ProjectsList = () => {
                 <Grid container justifyContent={`center`}>
                     <Grid item sm={6}>
                         <Typography textAlign={`center`} variant={`h6`} p={4}>
-                            Feel free to explore my open-source projects (the
-                            ones I can share publicly!) to get a sense of my
-                            coding style and the technologies I work with.
+                            Explore my projects
                         </Typography>
                     </Grid>
                 </Grid>
