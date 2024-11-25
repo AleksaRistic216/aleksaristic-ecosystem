@@ -16,7 +16,11 @@ export const ProjectsDetailsDescription = (
                 <Typography variant={`h5`}>Description</Typography>
             </Grid>
             <Grid item xs={12}>
-                <Typography>{props.description}</Typography>
+                {
+                    props.description.includes('<')
+                        ? <Typography dangerouslySetInnerHTML={{ __html: props.description }} />
+                        : <Typography>{props.description}</Typography> 
+                }
             </Grid>
         </Grid>
     )
