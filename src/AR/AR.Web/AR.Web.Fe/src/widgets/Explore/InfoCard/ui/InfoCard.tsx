@@ -1,11 +1,24 @@
-import { Box, Grid, Paper, Typography, styled } from '@mui/material'
+import {
+    Box,
+    Grid,
+    Paper,
+    Typography,
+    styled,
+    CircularProgress,
+} from '@mui/material'
 import { useEffect, useState } from 'react'
 import { ScrollDownHelper } from '../../ScrollDownHelper'
 import { WhatsApp } from '@mui/icons-material'
+import { ItemStyled } from '@/widgets/Explore/InfoCard/styled/ItemStyled'
+import { TotalLines } from '@/widgets/Explore/InfoCard/ui/TotalLines'
+import { GT, username } from '@/Constants'
 
 export const InfoCard = (): JSX.Element => {
     const maxOffsetTop = 20
     const [offsetTop, setOffsetTop] = useState<number>(maxOffsetTop)
+    const [totalContributions, setTotalContributions] = useState<
+        number | undefined
+    >(undefined)
 
     useEffect(() => {
         const iterations = 1000
@@ -18,17 +31,77 @@ export const InfoCard = (): JSX.Element => {
         }
     }, [])
 
-    const ItemStyled = styled(Typography)(
-        ({ theme }) => `
-            padding: ${theme.spacing(1)} ${theme.spacing(2)};
-            font-weight: 600;
-
-            label {
-                color: rgba(30, 30, 30, 0.6);
-                margin-right: ${theme.spacing(1)};
+    useEffect(() => {
+        const query = `
+        query($login: String!) {
+            user(login: $login) {
+                contributionsCollection {
+                    contributionCalendar {
+                        totalContributions
+                    }
+                }
             }
-        `
-    )
+        }`
+
+        const fetchContributions = async (
+            username: any,
+            startDate: any,
+            endDate: any
+        ) => {
+            const query = `
+        query($login: String!, $from: DateTime!, $to: DateTime!) {
+            user(login: $login) {
+                contributionsCollection(from: $from, to: $to) {
+                    contributionCalendar {
+                        totalContributions
+                    }
+                }
+            }
+        }`
+
+            const response = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${GT}`,
+                },
+                body: JSON.stringify({
+                    query,
+                    variables: {
+                        login: username,
+                        from: startDate,
+                        to: endDate,
+                    },
+                }),
+            })
+
+            const data = await response.json()
+            return (
+                data?.data?.user?.contributionsCollection?.contributionCalendar
+                    ?.totalContributions || 0
+            )
+        }
+
+        // Loop over years
+        const getAllContributions = async (username: any) => {
+            let totalContributions = 0
+            const currentYear = new Date().getFullYear()
+
+            for (let year = currentYear - 40; year <= currentYear; year++) {
+                const startDate = `${year}-01-01T00:00:00Z`
+                const endDate = `${year}-12-31T23:59:59Z`
+                totalContributions += await fetchContributions(
+                    username,
+                    startDate,
+                    endDate
+                )
+            }
+
+            setTotalContributions(totalContributions)
+        }
+
+        getAllContributions(username)
+    }, [])
 
     const currentDate = new Date()
     const emplyedFor = new Date(2023, 1, 9)
@@ -67,8 +140,23 @@ export const InfoCard = (): JSX.Element => {
 
                 <ItemStyled>
                     <label>Current personal team size:</label>
-                    <span>3</span>
+                    <span>5</span>
                 </ItemStyled>
+
+                <ItemStyled>
+                    <label>Currently preferred stack:</label>
+                    <span>AWS, dotnet, Next.js</span>
+                </ItemStyled>
+
+                <ItemStyled>
+                    <label>Total contributions (live data):</label>
+                    {totalContributions && (
+                        <span>{totalContributions.toLocaleString()}</span>
+                    )}
+                    {!totalContributions && <CircularProgress size={`1em`} />}
+                </ItemStyled>
+
+                <TotalLines />
 
                 <ItemStyled>
                     <label>Contact email:</label>

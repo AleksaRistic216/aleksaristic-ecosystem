@@ -9,7 +9,6 @@ export const ProjectsList = () => {
 
     useEffect(() => {
         const db = getDatabase(firebaseApp)
-        console.log(db)
 
         get(ref(db, '/projects'))
             .then((snapshot) => {

@@ -13,7 +13,6 @@ export const BottomIcons = (): JSX.Element => {
     const [opacity, setOpacity] = useState<number>(0)
 
     useEffect(() => {
-        console.log(`BottomIcons useEffect`)
         const iterations = 50
         for (let i = 0; i < iterations; i++) {
             setTimeout(() => {
