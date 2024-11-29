@@ -156,7 +156,7 @@ export const InfoCard = (): JSX.Element => {
                     {!totalContributions && <CircularProgress size={`1em`} />}
                 </ItemStyled>
 
-                <TotalLines />
+                {/*<TotalLines />*/}
 
                 <ItemStyled>
                     <label>Contact email:</label>
