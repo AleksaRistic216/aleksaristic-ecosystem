@@ -28,7 +28,7 @@ jobs:
       run: docker push limitlesssoft/aleksaristic-web-fe:${{ inputs.env }}
       
   deploy:
-    uses: DoLoop216/aleksaristic-ecosystem/.github/workflows/deploy-aleksaristic-web-fe.yml@master
+    uses: AleksaRistic216/aleksaristic-ecosystem/.github/workflows/deploy-aleksaristic-web-fe.yml@master
     needs: [ build-and-push-web-fe ]
     secrets: inherit
     with:
