@@ -21,10 +21,11 @@ spec:
         - containerPort: 3000
         resources:
           requests:
-            cpu: "4m"
-            memory: "4096Mi"
+            cpu: "2000m"       # 2 cores
+            memory: "8192Mi"   # 8 GiB
           limits:
-            cpu: "8m"
-            memory: "8192Mi"
+            cpu: "4000m"       # 4 cores
+            memory: "16384Mi"  # 16 GiB
+
       imagePullSecrets:
       - name: regcred
