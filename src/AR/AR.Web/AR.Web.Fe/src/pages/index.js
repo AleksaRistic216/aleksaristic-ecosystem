@@ -1,223 +1,81 @@
-import * as THREE from 'three'
-import { useEffect, useState } from 'react'
-import {
-    FontLoader,
-    GLTFLoader,
-    TextGeometry,
-} from 'three/examples/jsm/Addons.js'
+import React, { useState } from 'react'
+import Grid2 from '@mui/material/Unstable_Grid2'
 import { useRouter } from 'next/router'
 
 const Index = () => {
+    return (
+        <Grid2
+            spacing={2}
+            container
+            justifyContent="center"
+            alignItems="center"
+            style={{ minHeight: '100vh' }}
+        >
+            <Grid2>
+                <Item scale={4} text={`About`} href={`/explore`} />
+            </Grid2>
+            <Grid2>
+                <Item scale={4} text={`Projects`} href={`/projects`} />
+            </Grid2>
+            <Grid2>
+                <Item scale={4} text={`Blog`} href={`/blog`} />
+            </Grid2>
+        </Grid2>
+    )
+}
+
+const Item = ({ scale, text, href }) => {
     const router = useRouter()
-    const [userInput, setUserInput] = useState('')
-    const [font, setFont] = useState(null)
-    const [scene, setScene] = useState(new THREE.Scene())
-
-    var dynamicTextGeometry
-    var dynamicText
-
-    const textMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-    })
-
-    const validCharacters =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
-
-    const textZ = 0.18
-
-    const slowDownText = "Slow down li'l boy!"
-    const invalidOptionText = 'Error: Invalid option'
-
-    const [pcLoaded, setPcLoaded] = useState(false)
-
-    const [triggerOption, setTriggerOption] = useState(false)
-
-    useEffect(() => {
-        if (!triggerOption) return
-
-        switch (userInput) {
-            case '1':
-                router.push('/explore')
-                break
-            case '2':
-                router.push('/projects')
-                break
-            case '3':
-                router.push('/blog')
-                break
-            default:
-                setTriggerOption(false)
-                setUserInput(invalidOptionText)
-                break
-        }
-    }, [triggerOption])
-
-    useEffect(() => {
-        if (font === null || scene === null || !pcLoaded) return
-
-        const fontSize = 0.06
-        const lineDistance = 0.04
-        const textOptions = {
-            font: font,
-            size: fontSize,
-            height: 0.005,
-        }
-
-        let currentY = 2.15
-
-        const renderStaticText = (text) => {
-            const staticText = new TextGeometry(text, textOptions)
-            const staticTextMesh = new THREE.Mesh(staticText, textMaterial)
-            staticTextMesh.position.z = textZ
-            staticTextMesh.position.y = currentY
-            currentY -= fontSize + lineDistance
-            staticTextMesh.position.x = -0.75
-            scene.add(staticTextMesh)
-        }
-
-        renderStaticText('Welcome to aleksaristic.com')
-        renderStaticText('')
-        renderStaticText('Select option and press enter')
-        renderStaticText('1 - Home page')
-        renderStaticText('2 - Projects')
-        renderStaticText('3 - Blog')
-        renderStaticText('')
-
-        scene.remove(scene.getObjectByName('pc_text'))
-
-        dynamicTextGeometry = new TextGeometry(
-            'guest ~ $: ' + (userInput.length === 0 ? '█' : userInput),
-            textOptions
-        )
-        dynamicText = new THREE.Mesh(dynamicTextGeometry, textMaterial)
-        dynamicText.position.z = textZ
-        dynamicText.position.y = currentY
-        currentY -= fontSize + lineDistance
-        dynamicText.position.x = -0.75
-        dynamicText.name = 'pc_text'
-        scene.add(dynamicText)
-    }, [font, scene, userInput, pcLoaded])
-
-    useEffect(() => {
-        if (typeof window === 'undefined') {
-            return
-        }
-        
-        if (window.innerWidth < 900 || window.innerHeight < 600) {
-            router.push('/explore')
-            return
-        }
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace') {
-                setUserInput((prev) =>
-                    prev.indexOf(slowDownText) >= 0 ||
-                    prev.indexOf(invalidOptionText) >= 0
-                        ? ''
-                        : prev.slice(0, -1)
-                )
-                return
-            }
-
-            if (e.key === 'Enter') {
-                setTriggerOption(true)
-                return
-            }
-
-            if (!validCharacters.includes(e.key) && e.key !== ' ') return
-            setUserInput((prev) =>
-                prev.indexOf(slowDownText) >= 0 || prev.length > 10
-                    ? slowDownText
-                    : prev + e.key
-            )
-        })
-
-        const mouse = new THREE.Vector2()
-        document.addEventListener('mousemove', onDocumentMouseMove, false)
-        function onDocumentMouseMove(event) {
-            event.preventDefault()
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
-        }
-
-        let scroll = 0
-        document.addEventListener('wheel', (e) => {
-            scroll += e.deltaY
-
-            const minScroll = -1000
-            const maxScroll = 1000
-            if (scroll < minScroll) {
-                scroll = minScroll
-            }
-
-            if (scroll > maxScroll) {
-                scroll = maxScroll
-            }
-        })
-
-        const camera = new THREE.PerspectiveCamera(
-            75,
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        )
-        const renderer = new THREE.WebGLRenderer()
-        renderer.setSize(window.innerWidth, window.innerHeight)
-        renderer.domElement.style.cursor = 'none'
-        document.body.appendChild(renderer.domElement)
-
-        // ====
-
-        const light = new THREE.DirectionalLight(0xffffff, 1)
-        light.position.z = 10
-        light.position.y = 10
-        scene.add(light)
-
-        const fontLoader = new FontLoader()
-        fontLoader.load('fonts/helvetiker_regular.typeface.json', (f) => {
-            setFont(f)
-        })
-
-        const gltfLoader = new GLTFLoader()
-        gltfLoader.load('models/pc.glb', (gltf) => {
-            const pcScene = gltf.scene
-            const pcScale = 0.02
-            pcScene.scale.set(pcScale, pcScale, pcScale)
-            scene.add(pcScene)
-            setPcLoaded(true)
-        })
-        // ====
-
-        camera.position.y = 2
-        camera.rotation.x = -0.3
-        camera.position.z = 3.5
-
-        const cameraRotationSpeed = 0.1
-        const cameraRotationRange = 5
-
-        function animate() {
-            camera.rotation.y = THREE.MathUtils.lerp(
-                camera.rotation.y,
-                ((-mouse.x * Math.PI) / 100) * cameraRotationRange,
-                cameraRotationSpeed
-            )
-            camera.rotation.x = THREE.MathUtils.lerp(
-                camera.rotation.x,
-                ((mouse.y * Math.PI) / 100) * cameraRotationRange - 0.3,
-                cameraRotationSpeed
-            )
-            camera.position.setZ(
-                THREE.MathUtils.lerp(
-                    camera.position.z,
-                    3.5 + scroll / 500,
-                    0.05
-                )
-            )
-            renderer.render(scene, camera)
-        }
-        renderer.setAnimationLoop(animate)
-    }, [])
-    return <></>
+    const [hovered, setHovered] = useState(false)
+    const size = 64 * scale ?? 1
+    const offset = 4 * scale ?? 1
+    const fontSize = size / (text.length - 1)
+    const hoverColor = '#f33'
+    const baseColor = '#FFFFFF'
+    const fillColor = '#222'
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{
+                transition: 'transform 0.3s, filter 0.3s',
+                cursor: 'pointer',
+                transform: hovered ? 'scale(1.1) rotate(-5deg)' : 'scale(1)',
+                filter: hovered ? `drop-shadow(0 0 10px ${fillColor})` : 'none',
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            onMouseDown={() => router.push(href)}
+        >
+            <circle
+                cx={size / 2 + offset / 2}
+                cy={size / 2 + offset / 2}
+                r={size / 2 - offset}
+                fill={fillColor}
+                stroke="#222"
+                strokeWidth="2"
+            />
+            <text
+                x={size / 2 + offset / 2}
+                y={size / 2 + offset / 2 + size / (2.5 * text.length)}
+                textAnchor="middle"
+                fill="#fff"
+                fontSize={fontSize}
+                fontFamily="Roboto, sans-serif"
+                fontWeight="bold"
+                style={{
+                    transition: 'fill 0.3s',
+                    fill: hovered ? hoverColor : baseColor,
+                }}
+                pointerEvents={`none`}
+            >
+                {text}
+            </text>
+        </svg>
+    )
 }
 
 export default Index

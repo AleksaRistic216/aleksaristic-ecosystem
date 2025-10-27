@@ -4,4 +4,4 @@ const byteArray = new Uint8Array([
     110, 118, 113, 105,
 ])
 export const GT = new TextDecoder().decode(byteArray)
-export const username = 'DoLoop216' // Replace with the GitHub username
+export const username = 'AleksaRistic216' // Replace with the GitHub username
