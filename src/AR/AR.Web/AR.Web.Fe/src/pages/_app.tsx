@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import posthog from 'posthog-js'
 import { useRouter } from 'next/router'
 import { PostHogProvider } from 'posthog-js/react'
+import { AuthProvider } from '@/app/context/AuthContext'
 
 // Check that PostHog is client-side (used to handle Next.js SSR)
 if (typeof window !== 'undefined') {
@@ -38,32 +39,34 @@ export default function MyApp({ Component, pageProps }: AppProps) {
     return (
         <PostHogProvider client={posthog}>
             <ThemeProvider theme={mainTheme}>
-                <Stack
-                    alignItems={`center`}
-                    justifyContent={`center`}
-                    sx={{
-                        height: `100vh`,
-                        display: {
-                            xs: 'grid',
-                            lg: 'none',
-                        },
-                    }}
-                >
-                    <Typography>
-                        This website is accessible only on PC
-                    </Typography>
-                </Stack>
-                <Stack
-                    sx={{
-                        display: {
-                            xs: 'none',
-                            lg: 'grid',
-                        },
-                    }}
-                >
-                    <ToastContainer position={`top-right`} />
-                    <Component {...pageProps} />
-                </Stack>
+                <AuthProvider>
+                    <Stack
+                        alignItems={`center`}
+                        justifyContent={`center`}
+                        sx={{
+                            height: `100vh`,
+                            display: {
+                                xs: 'grid',
+                                lg: 'none',
+                            },
+                        }}
+                    >
+                        <Typography>
+                            This website is accessible only on PC
+                        </Typography>
+                    </Stack>
+                    <Stack
+                        sx={{
+                            display: {
+                                xs: 'none',
+                                lg: 'grid',
+                            },
+                        }}
+                    >
+                        <ToastContainer position={`top-right`} />
+                        <Component {...pageProps} />
+                    </Stack>
+                </AuthProvider>
             </ThemeProvider>
         </PostHogProvider>
     )
