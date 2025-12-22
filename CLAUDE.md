@@ -20,7 +20,7 @@ npm run lint      # Run ESLint (Next.js core-web-vitals rules)
 ## Architecture
 
 ### Technology Stack
-- **Frontend:** Next.js 14.1.0 with React 18, TypeScript 5
+- **Frontend:** Next.js 14.1.0 with React 18, JavaScript (ES6+)
 - **3D Graphics:** Three.js + React Three Fiber for immersive landing page
 - **UI:** Material-UI (MUI) 5.15 with Emotion CSS-in-JS
 - **Data:** Firebase Realtime Database for projects and blog posts
@@ -30,17 +30,16 @@ npm run lint      # Run ESLint (Next.js core-web-vitals rules)
 Components follow a consistent pattern in `src/widgets/`:
 ```
 Widget/
-├── ui/           # Visual/presentational components
-├── models/       # TypeScript interfaces
+├── ui/           # Visual/presentational components (.jsx)
 ├── styled/       # Emotion styled components
 ├── assets/       # Local static resources
-└── index.ts      # Barrel exports
+└── index.js      # Barrel exports
 ```
 
 ### Key Directories
 - `src/pages/` - Next.js page routes (index, blog, projects, explore)
 - `src/widgets/` - Reusable widget components (IndexScene, Blog, Projects, Explore, Layout, NavigationMenu)
-- `src/app/` - App configuration (theme.ts, firebase.ts, constants.ts)
+- `src/app/` - App configuration (theme.js, firebase.js, constants.js)
 - `public/models/` - 3D GLTF models for the landing page scene
 
 ### Data Flow
