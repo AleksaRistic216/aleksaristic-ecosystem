@@ -21,6 +21,9 @@ import {
 } from '@mui/material'
 import {
     Add,
+    ArrowDownward,
+    ArrowUpward,
+    ContentCopy,
     Delete,
     DeleteSweep,
     Edit,
@@ -311,6 +314,7 @@ export const PortfolioSection = () => {
     const [deletePortfolioOpen, setDeletePortfolioOpen] = useState(false)
     const [deletePortfolioId, setDeletePortfolioId] = useState(null)
     const [deletingPortfolio, setDeletingPortfolio] = useState(false)
+    const [cloningPortfolioId, setCloningPortfolioId] = useState(null)
 
     // Transaction data for expanded portfolio
     const [transactions, setTransactions] = useState([])
@@ -457,6 +461,27 @@ export const PortfolioSection = () => {
         setExpandedId(isExpanded ? portfolioId : null)
     }
 
+    const handleMovePortfolio = async (index, direction) => {
+        const swapIndex = index + direction
+        const reordered = [...portfolios]
+        ;[reordered[index], reordered[swapIndex]] = [
+            reordered[swapIndex],
+            reordered[index],
+        ]
+        setPortfolios(reordered)
+        try {
+            await portfolioService.reorderPortfolios(
+                reordered.map((p) => p.key),
+            )
+        } catch (error) {
+            toast(
+                `Greška pri premeštanju: ${error.code || error.message}`,
+                { type: 'error' },
+            )
+            await loadPortfolios()
+        }
+    }
+
     // Portfolio CRUD
     const handleCreatePortfolio = () => {
         setPortfolioDialogMode('create')
@@ -538,6 +563,24 @@ export const PortfolioSection = () => {
         }
     }
 
+    const handleClonePortfolio = async (e, portfolio) => {
+        e.stopPropagation()
+        setCloningPortfolioId(portfolio.key)
+        try {
+            const newKey = await portfolioService.clonePortfolio(
+                portfolio.key,
+                `${portfolio.data.name} (kopija)`
+            )
+            await loadPortfolios()
+            setExpandedId(newKey)
+            toast('Portfolio kloniran', { type: 'success' })
+        } catch (error) {
+            toast(`Greška: ${error.code || error.message}`, { type: 'error' })
+        } finally {
+            setCloningPortfolioId(null)
+        }
+    }
+
     // Transaction handlers
     const handlePeriodChange = async (newPeriod) => {
         setPeriod(newPeriod)
@@ -608,7 +651,7 @@ export const PortfolioSection = () => {
     return (
         <Grid item sm={12} sx={{ mb: 4 }}>
             <Box sx={{ maxWidth: 800, margin: '0 auto' }}>
-                {portfolios.map((p) => (
+                {portfolios.map((p, index) => (
                     <Accordion
                         key={p.key}
                         expanded={expandedId === p.key}
@@ -640,9 +683,7 @@ export const PortfolioSection = () => {
                                         variant="body2"
                                         color="text.secondary"
                                         sx={{
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
+                                            whiteSpace: 'pre-line',
                                         }}
                                     >
                                         {p.data.description}
@@ -654,6 +695,56 @@ export const PortfolioSection = () => {
                                     sx={{ display: 'flex', gap: 0.5, ml: 1, flexShrink: 0 }}
                                     onClick={(e) => e.stopPropagation()}
                                 >
+                                    <Tooltip title="Pomeri gore">
+                                        <span>
+                                            <IconButton
+                                                size="small"
+                                                disabled={index === 0}
+                                                onClick={() =>
+                                                    handleMovePortfolio(
+                                                        index,
+                                                        -1,
+                                                    )
+                                                }
+                                            >
+                                                <ArrowUpward fontSize="small" />
+                                            </IconButton>
+                                        </span>
+                                    </Tooltip>
+                                    <Tooltip title="Pomeri dole">
+                                        <span>
+                                            <IconButton
+                                                size="small"
+                                                disabled={
+                                                    index ===
+                                                    portfolios.length - 1
+                                                }
+                                                onClick={() =>
+                                                    handleMovePortfolio(
+                                                        index,
+                                                        1,
+                                                    )
+                                                }
+                                            >
+                                                <ArrowDownward fontSize="small" />
+                                            </IconButton>
+                                        </span>
+                                    </Tooltip>
+                                    <Tooltip title="Kloniraj">
+                                        <IconButton
+                                            size="small"
+                                            disabled={!!cloningPortfolioId}
+                                            onClick={(e) =>
+                                                handleClonePortfolio(e, p)
+                                            }
+                                        >
+                                            {cloningPortfolioId === p.key ? (
+                                                <CircularProgress size={16} />
+                                            ) : (
+                                                <ContentCopy fontSize="small" />
+                                            )}
+                                        </IconButton>
+                                    </Tooltip>
                                     <Tooltip title="Uredi">
                                         <IconButton
                                             size="small"

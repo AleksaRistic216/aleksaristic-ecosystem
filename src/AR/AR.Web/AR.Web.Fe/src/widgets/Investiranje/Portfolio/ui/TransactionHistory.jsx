@@ -12,8 +12,10 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControlLabel,
     IconButton,
     Paper,
+    Switch,
     Table,
     TableBody,
     TableCell,
@@ -22,7 +24,7 @@ import {
     Tooltip,
     Typography,
 } from '@mui/material'
-import { Delete, Edit, ExpandMore, Warning } from '@mui/icons-material'
+import { Delete, DeleteSweep, Edit, ExpandMore, Warning } from '@mui/icons-material'
 import { useState } from 'react'
 import { toast } from 'react-toastify'
 import { HoldingsTableContainerStyled } from '../styled/HoldingsTableContainerStyled'
@@ -40,7 +42,9 @@ export const TransactionHistory = ({
 }) => {
     const { isAdmin } = useAuth()
     const [deletingTx, setDeletingTx] = useState(undefined)
+    const [isDeletingAll, setIsDeletingAll] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [showDetails, setShowDetails] = useState(false)
 
     const handleDeleteConfirm = async () => {
         if (!deletingTx) return
@@ -60,6 +64,24 @@ export const TransactionHistory = ({
         }
     }
 
+    const [showDeleteAll, setShowDeleteAll] = useState(false)
+
+    const handleDeleteAllConfirm = async () => {
+        setIsDeleting(true)
+        try {
+            await portfolioService.deleteAllTransactions(portfolioId)
+            toast('Sve transakcije su obrisane', { type: 'success' })
+            onRefresh()
+        } catch (error) {
+            toast(error.message || 'Greška pri brisanju transakcija', {
+                type: 'error',
+            })
+        } finally {
+            setIsDeleting(false)
+            setShowDeleteAll(false)
+        }
+    }
+
     const sortedTransactions = transactions
         ?.slice()
         .sort((a, b) => (b.data.createdAt || 0) - (a.data.createdAt || 0))
@@ -74,9 +96,62 @@ export const TransactionHistory = ({
                 }}
             >
                 <AccordionSummary expandIcon={<ExpandMore />}>
-                    <Typography variant="subtitle1" fontWeight={600}>
-                        Istorija transakcija ({transactions.length})
-                    </Typography>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            mr: 1,
+                        }}
+                    >
+                        <Typography variant="subtitle1" fontWeight={600}>
+                            Istorija transakcija ({transactions.length})
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {transactions.length > 0 && (
+                                <FormControlLabel
+                                    control={
+                                        <Switch
+                                            size="small"
+                                            checked={showDetails}
+                                            onChange={(e) => {
+                                                e.stopPropagation()
+                                                setShowDetails(e.target.checked)
+                                            }}
+                                        />
+                                    }
+                                    label={
+                                        <Typography variant="caption">
+                                            Detalji
+                                        </Typography>
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{ mr: 0 }}
+                                />
+                            )}
+                        {isAdmin && transactions.length > 0 && (
+                            <Tooltip title="Obriši sve transakcije">
+                                <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setShowDeleteAll(true)
+                                    }}
+                                    sx={{
+                                        '&:hover': {
+                                            bgcolor: 'error.main',
+                                            color: 'white',
+                                        },
+                                        transition: 'all 0.15s ease',
+                                    }}
+                                >
+                                    <DeleteSweep fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                        </Box>
+                    </Box>
                 </AccordionSummary>
                 <AccordionDetails sx={{ p: 0 }}>
                     {transactions.length === 0 ? (
@@ -104,12 +179,16 @@ export const TransactionHistory = ({
                                         <TableCell>Datum</TableCell>
                                         <TableCell>Ticker</TableCell>
                                         <TableCell>Tip</TableCell>
-                                        <TableCell align="right">
-                                            Akcije
-                                        </TableCell>
-                                        <TableCell align="right">
-                                            Cena
-                                        </TableCell>
+                                        {showDetails && (
+                                            <TableCell align="right">
+                                                Akcije
+                                            </TableCell>
+                                        )}
+                                        {showDetails && (
+                                            <TableCell align="right">
+                                                Cena
+                                            </TableCell>
+                                        )}
                                         <TableCell align="right">
                                             Ukupno
                                         </TableCell>
@@ -154,15 +233,19 @@ export const TransactionHistory = ({
                                                     }}
                                                 />
                                             </TableCell>
-                                            <TableCell align="right">
-                                                {tx.data.shares}
-                                            </TableCell>
-                                            <TableCell align="right">
-                                                {formatCurrency(
-                                                    tx.data.price,
-                                                    tx.data.currency
-                                                )}
-                                            </TableCell>
+                                            {showDetails && (
+                                                <TableCell align="right">
+                                                    {tx.data.shares}
+                                                </TableCell>
+                                            )}
+                                            {showDetails && (
+                                                <TableCell align="right">
+                                                    {formatCurrency(
+                                                        tx.data.price,
+                                                        tx.data.currency
+                                                    )}
+                                                </TableCell>
+                                            )}
                                             <TableCell align="right">
                                                 {formatCurrency(
                                                     tx.data.shares *
@@ -286,6 +369,64 @@ export const TransactionHistory = ({
                             <CircularProgress size={20} color="inherit" />
                         ) : (
                             'Obriši'
+                        )}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={showDeleteAll}
+                onClose={() => setShowDeleteAll(false)}
+                maxWidth="xs"
+                fullWidth
+                PaperProps={{
+                    sx: { borderRadius: 3 },
+                }}
+            >
+                <DialogTitle sx={{ pb: 1 }}>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                        }}
+                    >
+                        <Warning color="error" />
+                        Obriši sve transakcije
+                    </Box>
+                </DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" color="text.secondary">
+                        Da li ste sigurni da želite da obrišete svih{' '}
+                        <strong>{transactions.length}</strong> transakcija?
+                    </Typography>
+                    <Typography
+                        variant="body2"
+                        color="error"
+                        sx={{ mt: 1 }}
+                    >
+                        Ova akcija se ne može poništiti.
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button
+                        onClick={() => setShowDeleteAll(false)}
+                        disabled={isDeleting}
+                        sx={{ textTransform: 'none' }}
+                    >
+                        Otkaži
+                    </Button>
+                    <Button
+                        onClick={handleDeleteAllConfirm}
+                        color="error"
+                        variant="contained"
+                        disabled={isDeleting}
+                        sx={{ textTransform: 'none', minWidth: 100 }}
+                    >
+                        {isDeleting ? (
+                            <CircularProgress size={20} color="inherit" />
+                        ) : (
+                            'Obriši sve'
                         )}
                     </Button>
                 </DialogActions>

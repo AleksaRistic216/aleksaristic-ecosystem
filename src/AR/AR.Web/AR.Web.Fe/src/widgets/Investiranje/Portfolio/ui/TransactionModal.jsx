@@ -2,7 +2,9 @@ import { portfolioService } from '@/app/services/portfolioService'
 import {
     Box,
     Button,
+    Chip,
     CircularProgress,
+    Collapse,
     Dialog,
     DialogActions,
     DialogContent,
@@ -12,12 +14,17 @@ import {
     IconButton,
     LinearProgress,
     Switch,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableRow,
     TextField,
     ToggleButton,
     ToggleButtonGroup,
     Typography,
 } from '@mui/material'
-import { Close, Add, Edit } from '@mui/icons-material'
+import { Close, Add, Edit, ExpandMore } from '@mui/icons-material'
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 
@@ -67,6 +74,7 @@ export const TransactionModal = ({
     const [isRecurring, setIsRecurring] = useState(false)
     const [monthlyAmount, setMonthlyAmount] = useState('')
     const [numMonths, setNumMonths] = useState('')
+    const [yearlyIncrease, setYearlyIncrease] = useState('')
     const [saveProgress, setSaveProgress] = useState(0)
 
     const fetchPrice = async (symbol, selectedDate) => {
@@ -137,9 +145,15 @@ export const TransactionModal = ({
             setIsRecurring(false)
             setMonthlyAmount('')
             setNumMonths('')
+            setYearlyIncrease('')
             setSaveProgress(0)
         }
     }, [isOpen, initialData, mode])
+
+    const getMonthlyAmount = (baseAmount, pct, monthIndex) => {
+        if (!pct || pct <= 0) return baseAmount
+        return baseAmount * Math.pow(1 + pct / 100, Math.floor(monthIndex / 12))
+    }
 
     const handleSaveSingle = async () => {
         if (!shares || Number(shares) <= 0) {
@@ -201,7 +215,8 @@ export const TransactionModal = ({
 
         const trimmed = ticker.trim().toUpperCase()
         const months = Number(numMonths)
-        const amount = Number(monthlyAmount)
+        const baseAmount = Number(monthlyAmount)
+        const increasePct = Number(yearlyIncrease) || 0
 
         // Fetch quote for company/currency
         const quoteRes = await fetch(`/api/stock/quote?symbols=${trimmed}`)
@@ -234,6 +249,7 @@ export const TransactionModal = ({
 
             if (!txPrice || txPrice <= 0) continue
 
+            const amount = getMonthlyAmount(baseAmount, increasePct, i)
             const txShares = amount / txPrice
 
             await portfolioService.createTransaction(portfolioId, {
@@ -303,9 +319,28 @@ export const TransactionModal = ({
         numMonths &&
         Number(monthlyAmount) > 0 &&
         Number(numMonths) > 0
-    const recurringTotal = showRecurringSummary
-        ? Number(monthlyAmount) * Number(numMonths)
-        : 0
+    const recurringEntries = showRecurringSummary
+        ? (() => {
+              const base = Number(monthlyAmount)
+              const pct = Number(yearlyIncrease) || 0
+              const m = Number(numMonths)
+              const entries = []
+              for (let i = 0; i < m; i++) {
+                  const amt = getMonthlyAmount(base, pct, i)
+                  entries.push({
+                      month: i + 1,
+                      date: addMonths(date, i),
+                      amount: amt,
+                  })
+              }
+              return entries
+          })()
+        : []
+    const recurringTotal = recurringEntries.reduce(
+        (sum, e) => sum + e.amount,
+        0,
+    )
+    const [showTransactionList, setShowTransactionList] = useState(false)
 
     return (
         <Dialog
@@ -437,7 +472,7 @@ export const TransactionModal = ({
                     )}
                     {isRecurring ? (
                         <>
-                            <Grid item xs={12} md={4}>
+                            <Grid item xs={12} md={6}>
                                 <TextField
                                     label={`Mesečni iznos (${currencySymbol})`}
                                     fullWidth
@@ -450,7 +485,7 @@ export const TransactionModal = ({
                                     inputProps={{ min: 0, step: 'any' }}
                                 />
                             </Grid>
-                            <Grid item xs={12} md={4}>
+                            <Grid item xs={12} md={6}>
                                 <TextField
                                     label="Broj meseci"
                                     fullWidth
@@ -463,7 +498,21 @@ export const TransactionModal = ({
                                     inputProps={{ min: 1, step: 1 }}
                                 />
                             </Grid>
-                            <Grid item xs={12} md={4}>
+                            <Grid item xs={12} md={6}>
+                                <TextField
+                                    label="Godišnje povećanje (%)"
+                                    fullWidth
+                                    type="number"
+                                    value={yearlyIncrease}
+                                    onChange={(e) =>
+                                        setYearlyIncrease(e.target.value)
+                                    }
+                                    disabled={loading}
+                                    inputProps={{ min: 0, step: 'any' }}
+                                    placeholder="0"
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
                                 <TextField
                                     label="Početni datum"
                                     fullWidth
@@ -589,8 +638,118 @@ export const TransactionModal = ({
                                     )}{' '}
                                     x {Number(numMonths)} meseci &middot; od{' '}
                                     {date} do {addMonths(date, Number(numMonths) - 1)}
+                                    {Number(yearlyIncrease) > 0 &&
+                                        ` · +${yearlyIncrease}% godišnje`}
                                 </Typography>
+                                <Button
+                                    size="small"
+                                    onClick={() =>
+                                        setShowTransactionList(
+                                            (v) => !v
+                                        )
+                                    }
+                                    sx={{
+                                        textTransform: 'none',
+                                        mt: 1,
+                                        fontSize: '0.75rem',
+                                    }}
+                                    endIcon={
+                                        <ExpandMore
+                                            sx={{
+                                                transform:
+                                                    showTransactionList
+                                                        ? 'rotate(180deg)'
+                                                        : 'none',
+                                                transition: '0.2s',
+                                            }}
+                                        />
+                                    }
+                                >
+                                    {showTransactionList
+                                        ? 'Sakrij listu'
+                                        : 'Prikaži listu transakcija'}
+                                </Button>
                             </Box>
+                            <Collapse in={showTransactionList}>
+                                <Box
+                                    sx={{
+                                        maxHeight: 200,
+                                        overflow: 'auto',
+                                        mt: 1,
+                                    }}
+                                >
+                                    <Table size="small">
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell sx={{ py: 0.5 }}>
+                                                    #
+                                                </TableCell>
+                                                <TableCell sx={{ py: 0.5 }}>
+                                                    Datum
+                                                </TableCell>
+                                                <TableCell
+                                                    align="right"
+                                                    sx={{ py: 0.5 }}
+                                                >
+                                                    Iznos
+                                                </TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {recurringEntries.map((entry) => (
+                                                <TableRow key={entry.month}>
+                                                    <TableCell
+                                                        sx={{ py: 0.25 }}
+                                                    >
+                                                        <Chip
+                                                            label={entry.month}
+                                                            size="small"
+                                                            sx={{
+                                                                height: 20,
+                                                                fontSize:
+                                                                    '0.7rem',
+                                                            }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell
+                                                        sx={{
+                                                            py: 0.25,
+                                                            fontSize:
+                                                                '0.8rem',
+                                                        }}
+                                                    >
+                                                        {entry.date}
+                                                    </TableCell>
+                                                    <TableCell
+                                                        align="right"
+                                                        sx={{
+                                                            py: 0.25,
+                                                            fontSize:
+                                                                '0.8rem',
+                                                            fontWeight:
+                                                                entry.amount !==
+                                                                Number(
+                                                                    monthlyAmount
+                                                                )
+                                                                    ? 600
+                                                                    : 400,
+                                                        }}
+                                                    >
+                                                        {currencySymbol}
+                                                        {entry.amount.toLocaleString(
+                                                            undefined,
+                                                            {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            }
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </Box>
+                            </Collapse>
                         </Grid>
                     )}
                     {loading && isRecurring && saveProgress > 0 && (

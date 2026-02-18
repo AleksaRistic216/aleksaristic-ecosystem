@@ -18,12 +18,25 @@ export const HoldingsTableContainerStyled = styled(TableContainer)(
             font-size: 0.75rem;
             letter-spacing: 0.5px;
             color: ${theme.palette.text.secondary};
-            padding: 16px 24px;
+            padding: 12px 12px;
             border-bottom: 2px solid ${theme.palette.divider};
+            white-space: nowrap;
+        }
+
+        thead th:first-of-type,
+        tbody td:first-of-type,
+        tbody th:first-of-type {
+            padding-left: 24px;
+        }
+
+        thead th:last-of-type,
+        tbody td:last-of-type,
+        tbody th:last-of-type {
+            padding-right: 24px;
         }
 
         tbody td, tbody th {
-            padding: 16px 24px;
+            padding: 12px 12px;
             transition: background-color 0.15s ease;
         }
 

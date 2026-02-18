@@ -23,7 +23,11 @@ export const portfolioService = {
                     key,
                     data: data[key],
                 }))
-                .sort((a, b) => (a.data.createdAt || 0) - (b.data.createdAt || 0))
+                .sort(
+                    (a, b) =>
+                        (a.data.order ?? a.data.createdAt ?? 0) -
+                        (b.data.order ?? b.data.createdAt ?? 0),
+                )
         }
         return []
     },
@@ -34,8 +38,17 @@ export const portfolioService = {
             name,
             description,
             createdAt: Date.now(),
+            order: Date.now(),
         })
         return configRef.key
+    },
+
+    async reorderPortfolios(orderedKeys) {
+        const updates = {}
+        orderedKeys.forEach((key, index) => {
+            updates[`/portfolio/configs/${key}/order`] = index
+        })
+        await update(ref(db), updates)
     },
 
     async updatePortfolio(key, fields) {
@@ -87,5 +100,32 @@ export const portfolioService = {
 
     async deleteAllTransactions(portfolioId) {
         await remove(ref(db, `/portfolio/transactions/${portfolioId}`))
+    },
+
+    async clonePortfolio(sourceKey, newName) {
+        const configSnap = await get(ref(db, `/portfolio/configs/${sourceKey}`))
+        if (!configSnap.exists()) throw new Error('Portfolio not found')
+
+        const sourceConfig = configSnap.val()
+        const newConfigRef = push(ref(db, '/portfolio/configs'))
+        await set(newConfigRef, {
+            name: newName,
+            description: sourceConfig.description || '',
+            createdAt: Date.now(),
+            order: Date.now(),
+        })
+
+        const txSnap = await get(ref(db, `/portfolio/transactions/${sourceKey}`))
+        if (txSnap.exists()) {
+            const txData = txSnap.val()
+            for (const tx of Object.values(txData)) {
+                const txRef = push(
+                    ref(db, `/portfolio/transactions/${newConfigRef.key}`)
+                )
+                await set(txRef, { ...tx, createdAt: Date.now() })
+            }
+        }
+
+        return newConfigRef.key
     },
 }
