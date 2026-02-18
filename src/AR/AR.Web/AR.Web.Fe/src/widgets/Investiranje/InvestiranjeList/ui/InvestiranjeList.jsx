@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { AuthButton } from '@/widgets/Auth'
 import { InvestiranjeTable } from './InvestiranjeTable'
 import { InvestiranjeEditorModal } from '../../InvestiranjeEditor/ui/InvestiranjeEditorModal'
+import { PortfolioSection } from '../../Portfolio/ui/PortfolioSection'
 
 export const InvestiranjeList = () => {
     const { isAdmin } = useAuth()
@@ -54,6 +55,16 @@ export const InvestiranjeList = () => {
                                 </Typography>
                             </Grid>
                         </Grid>
+                    </Grid>
+                    <PortfolioSection />
+                    <Grid item sm={12} sx={{ mt: 4 }}>
+                        <Typography
+                            component="h2"
+                            variant="h5"
+                            fontWeight={600}
+                        >
+                            Članci
+                        </Typography>
                     </Grid>
                     {isAdmin && (
                         <Grid item sm={12} sx={{ mt: 1 }}>
