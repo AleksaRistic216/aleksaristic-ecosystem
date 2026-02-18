@@ -27,25 +27,58 @@ const fmt = (v) =>
 
 const TransactionDot = (props) => {
     const { cx, cy, payload } = props
-    if (!payload.hasBuy && !payload.hasSell) return null
+    const markers = []
 
-    if (payload.hasBuy && payload.hasSell) {
-        return (
-            <g>
-                <circle cx={cx - 4} cy={cy} r={4} fill="#4caf50" stroke="white" strokeWidth={1.5} />
-                <circle cx={cx + 4} cy={cy} r={4} fill="#f44336" stroke="white" strokeWidth={1.5} />
-            </g>
-        )
+    if (payload.hasBuy) markers.push('buy')
+    if (payload.hasSell) markers.push('sell')
+    if (payload.hasDividend) markers.push('div')
+
+    if (markers.length === 0) return null
+
+    if (markers.length === 1) {
+        if (markers[0] === 'div') {
+            return (
+                <polygon
+                    points={`${cx},${cy - 5} ${cx + 4},${cy} ${cx},${cy + 5} ${cx - 4},${cy}`}
+                    fill="#1976d2"
+                    stroke="white"
+                    strokeWidth={1.5}
+                />
+            )
+        }
+        const color = markers[0] === 'buy' ? '#4caf50' : '#f44336'
+        return <circle cx={cx} cy={cy} r={5} fill={color} stroke="white" strokeWidth={2} />
     }
 
-    const color = payload.hasBuy ? '#4caf50' : '#f44336'
-    return <circle cx={cx} cy={cy} r={5} fill={color} stroke="white" strokeWidth={2} />
+    // Multiple markers — space them out
+    const offset = markers.length === 2 ? 5 : 7
+    return (
+        <g>
+            {markers.map((m, i) => {
+                const x = cx + (i - (markers.length - 1) / 2) * offset
+                if (m === 'div') {
+                    return (
+                        <polygon
+                            key={m}
+                            points={`${x},${cy - 4} ${x + 3},${cy} ${x},${cy + 4} ${x - 3},${cy}`}
+                            fill="#1976d2"
+                            stroke="white"
+                            strokeWidth={1}
+                        />
+                    )
+                }
+                const color = m === 'buy' ? '#4caf50' : '#f44336'
+                return <circle key={m} cx={x} cy={cy} r={4} fill={color} stroke="white" strokeWidth={1.5} />
+            })}
+        </g>
+    )
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         const value = payload.find((p) => p.dataKey === 'value')
-        const deposited = payload.find((p) => p.dataKey === 'deposited')
+        const deposited = payload.find((p) => p.dataKey === 'selfDeposited')
+        const dividends = payload.find((p) => p.dataKey === 'dividends')
         const dataPoint = payload[0]?.payload
         const diff =
             value && deposited ? value.value - deposited.value : 0
@@ -81,6 +114,14 @@ const CustomTooltip = ({ active, payload, label }) => {
                         Uloženo: {fmt(deposited.value)}
                     </Typography>
                 )}
+                {dividends && dividends.value != null && (
+                    <Typography
+                        variant="body2"
+                        sx={{ color: '#1976d2' }}
+                    >
+                        Dividende: {fmt(dividends.value)}
+                    </Typography>
+                )}
                 {value && deposited && (
                     <Typography
                         variant="body2"
@@ -104,6 +145,14 @@ const CustomTooltip = ({ active, payload, label }) => {
                         sx={{ color: '#f44336', fontWeight: 600, display: 'block', mt: dataPoint?.hasBuy ? 0 : 0.5 }}
                     >
                         ● Prodaja
+                    </Typography>
+                )}
+                {dataPoint?.hasDividend && (
+                    <Typography
+                        variant="caption"
+                        sx={{ color: '#1976d2', fontWeight: 600, display: 'block', mt: (dataPoint?.hasBuy || dataPoint?.hasSell) ? 0 : 0.5 }}
+                    >
+                        ◆ Isplata dividende
                     </Typography>
                 )}
             </Box>
@@ -198,13 +247,24 @@ export const PortfolioChart = ({ data, period, onPeriodChange, isLoading }) => {
                         />
                         <Line
                             type="stepAfter"
-                            dataKey="deposited"
+                            dataKey="selfDeposited"
                             name="Uloženo"
                             stroke="#9e9e9e"
                             strokeWidth={1.5}
                             strokeDasharray="6 3"
                             dot={false}
                             activeDot={{ r: 3, strokeWidth: 0 }}
+                        />
+                        <Line
+                            type="monotone"
+                            dataKey="dividends"
+                            name="Dividende"
+                            stroke="#1976d2"
+                            strokeWidth={1.5}
+                            strokeDasharray="4 3"
+                            dot={false}
+                            activeDot={{ r: 3, strokeWidth: 0 }}
+                            connectNulls
                         />
                     </LineChart>
                 </ResponsiveContainer>

@@ -40,6 +40,8 @@ export default async function handler(req, res) {
                     changePercent: q.regularMarketChangePercent,
                     currency: q.currency,
                     name: q.shortName || q.longName,
+                    dividendRate: q.trailingAnnualDividendRate || null,
+                    dividendYield: q.trailingAnnualDividendYield || null,
                 }
             }
         })

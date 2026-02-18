@@ -46,6 +46,7 @@ export default async function handler(req, res) {
         )
 
         const history = {}
+        const dividends = {}
         results.forEach((result, index) => {
             const ticker = tickers[index]
             if (result.status === 'fulfilled' && result.value?.quotes) {
@@ -55,6 +56,16 @@ export default async function handler(req, res) {
                         date: item.date.toISOString().split('T')[0],
                         close: item.close,
                     }))
+
+                const events = result.value.events?.dividends
+                if (events) {
+                    dividends[ticker] = Object.values(events)
+                        .map((d) => ({
+                            date: new Date(d.date).toISOString().split('T')[0],
+                            amount: d.amount,
+                        }))
+                        .sort((a, b) => (a.date > b.date ? 1 : -1))
+                }
             }
         })
 
@@ -62,7 +73,7 @@ export default async function handler(req, res) {
             'Cache-Control',
             's-maxage=3600, stale-while-revalidate=7200'
         )
-        return res.status(200).json({ history })
+        return res.status(200).json({ history, dividends })
     } catch (error) {
         console.error('History API error:', error)
         return res.status(500).json({ error: 'Failed to fetch history' })

@@ -58,6 +58,10 @@ export const HoldingsTable = ({ holdings, isLoading }) => {
     const totalPnl = holdings.reduce((sum, h) => sum + h.pnl, 0)
     const totalCost = holdings.reduce((sum, h) => sum + h.avgPrice * h.shares, 0)
     const totalPnlPercent = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0
+    const totalDividends = holdings.reduce(
+        (sum, h) => sum + (h.dividendsReceived || 0),
+        0,
+    )
 
     return (
         <HoldingsTableContainerStyled component={Paper}>
@@ -71,6 +75,9 @@ export const HoldingsTable = ({ holdings, isLoading }) => {
                         <TableCell align="right">Trenutna cena</TableCell>
                         <TableCell align="right">Uloženo</TableCell>
                         <TableCell align="right">Ukupna vrednost</TableCell>
+                        <TableCell align="right">Div. prinos</TableCell>
+                        <TableCell align="right">God. dividenda</TableCell>
+                        <TableCell align="right">Primljene div.</TableCell>
                         <TableCell align="right">P&L</TableCell>
                     </TableRow>
                 </TableHead>
@@ -122,6 +129,37 @@ export const HoldingsTable = ({ holdings, isLoading }) => {
                                 </Typography>
                             </TableCell>
                             <TableCell align="right">
+                                <Typography variant="body2">
+                                    {h.dividendYield
+                                        ? `${(h.dividendYield * 100).toFixed(2)}%`
+                                        : '\u2014'}
+                                </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                                <Typography variant="body2">
+                                    {h.dividendRate
+                                        ? formatCurrency(h.dividendRate, h.currency)
+                                        : '\u2014'}
+                                </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        color:
+                                            h.dividendsReceived > 0
+                                                ? '#4caf50'
+                                                : 'text.secondary',
+                                        fontWeight:
+                                            h.dividendsReceived > 0 ? 500 : 400,
+                                    }}
+                                >
+                                    {h.dividendsReceived > 0
+                                        ? formatCurrency(h.dividendsReceived, h.currency)
+                                        : '\u2014'}
+                                </Typography>
+                            </TableCell>
+                            <TableCell align="right">
                                 <PnlCell
                                     value={h.pnl}
                                     percent={h.pnlPercent}
@@ -154,6 +192,23 @@ export const HoldingsTable = ({ holdings, isLoading }) => {
                                 }}
                             >
                                 {formatCurrency(totalValue)}
+                            </Typography>
+                        </TableCell>
+                        <TableCell colSpan={2} />
+                        <TableCell align="right">
+                            <Typography
+                                variant="body2"
+                                fontWeight={600}
+                                sx={{
+                                    color:
+                                        totalDividends > 0
+                                            ? '#4caf50'
+                                            : 'text.secondary',
+                                }}
+                            >
+                                {totalDividends > 0
+                                    ? formatCurrency(totalDividends)
+                                    : '\u2014'}
                             </Typography>
                         </TableCell>
                         <TableCell align="right">

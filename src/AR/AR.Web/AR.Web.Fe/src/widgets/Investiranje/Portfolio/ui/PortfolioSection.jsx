@@ -11,8 +11,10 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControlLabel,
     Grid,
     IconButton,
+    Switch,
     TextField,
     Tooltip,
     Typography,
@@ -32,10 +34,15 @@ import { HoldingsTable } from './HoldingsTable'
 import { TransactionHistory } from './TransactionHistory'
 import { TransactionModal } from './TransactionModal'
 
-const computeHoldings = (transactions, quotes) => {
+const computeHoldings = (transactions, quotes, dividendData) => {
     const holdingsMap = {}
 
-    transactions.forEach((tx) => {
+    // Sort transactions by date for replay
+    const sortedTxs = transactions
+        .slice()
+        .sort((a, b) => (a.data.date > b.data.date ? 1 : -1))
+
+    sortedTxs.forEach((tx) => {
         const { ticker, company, type, shares, price, currency } = tx.data
         if (!holdingsMap[ticker]) {
             holdingsMap[ticker] = {
@@ -62,11 +69,34 @@ const computeHoldings = (transactions, quotes) => {
                 h.totalShares > 0 ? h.totalCost / h.totalShares : 0
             const currentPrice = quote?.price || 0
             const totalValue = h.totalShares * currentPrice
-            const pnl = totalValue - h.totalShares * avgPrice
+
+            // Compute dividends received by replaying shares held at each ex-date
+            let dividendsReceived = 0
+            const tickerDividends = dividendData?.[h.ticker] || []
+            tickerDividends.forEach((div) => {
+                const exDate = div.date.replace(/\//g, '-')
+                let sharesAtDate = 0
+                sortedTxs.forEach((tx) => {
+                    if (tx.data.ticker !== h.ticker) return
+                    const txDate = tx.data.date.replace(/\//g, '-')
+                    if (txDate <= exDate) {
+                        if (tx.data.type === 'buy') {
+                            sharesAtDate += tx.data.shares
+                        } else {
+                            sharesAtDate -= tx.data.shares
+                        }
+                    }
+                })
+                if (sharesAtDate > 0) {
+                    dividendsReceived += sharesAtDate * div.amount
+                }
+            })
+
+            const priceAppreciation = totalValue - h.totalShares * avgPrice
+            const pnl = priceAppreciation + dividendsReceived
+            const totalCostBasis = h.totalShares * avgPrice
             const pnlPercent =
-                avgPrice > 0
-                    ? ((currentPrice - avgPrice) / avgPrice) * 100
-                    : 0
+                totalCostBasis > 0 ? (pnl / totalCostBasis) * 100 : 0
 
             return {
                 ticker: h.ticker,
@@ -78,11 +108,71 @@ const computeHoldings = (transactions, quotes) => {
                 pnl,
                 pnlPercent,
                 currency: h.currency,
+                dividendRate: quote?.dividendRate || null,
+                dividendYield: quote?.dividendYield || null,
+                dividendsReceived,
             }
         })
 }
 
-const computeChartData = (transactions, historyData) => {
+const generateDripTransactions = (transactions, dividendData, historyData) => {
+    if (!dividendData || !Object.keys(dividendData).length) return []
+
+    const sortedTxs = transactions
+        .slice()
+        .sort((a, b) => (a.data.date > b.data.date ? 1 : -1))
+
+    // Build price lookup from history
+    const priceByDateTicker = {}
+    Object.entries(historyData || {}).forEach(([ticker, history]) => {
+        history.forEach(({ date, close }) => {
+            priceByDateTicker[`${ticker}:${date}`] = close
+        })
+    })
+
+    const drip = []
+    Object.entries(dividendData).forEach(([ticker, divs]) => {
+        divs.forEach((div) => {
+            const exDate = div.date
+            // Compute shares held at ex-date from real transactions only
+            let sharesAtDate = 0
+            sortedTxs.forEach((tx) => {
+                if (tx.data.ticker !== ticker) return
+                const txDate = tx.data.date.replace(/\//g, '-')
+                if (txDate <= exDate) {
+                    if (tx.data.type === 'buy') sharesAtDate += tx.data.shares
+                    else sharesAtDate -= tx.data.shares
+                }
+            })
+            if (sharesAtDate <= 0) return
+
+            const dividendCash = sharesAtDate * div.amount
+            const closePrice = priceByDateTicker[`${ticker}:${exDate}`]
+            if (!closePrice || closePrice <= 0) return
+
+            const newShares = dividendCash / closePrice
+            // Find company/currency from an existing transaction for this ticker
+            const refTx = sortedTxs.find((tx) => tx.data.ticker === ticker)
+            drip.push({
+                key: `drip-${ticker}-${exDate}`,
+                data: {
+                    ticker,
+                    company: refTx?.data.company || ticker,
+                    type: 'buy',
+                    shares: newShares,
+                    price: closePrice,
+                    currency: refTx?.data.currency || 'USD',
+                    date: exDate,
+                    isDrip: true,
+                },
+            })
+        })
+    })
+
+    return drip
+}
+
+const computeChartData = (transactions, historyData, dividendData) => {
     if (!transactions.length || !Object.keys(historyData).length) return []
 
     const pricesByDate = {}
@@ -109,20 +199,38 @@ const computeChartData = (transactions, historyData) => {
         else txByDate[txDate].sell = true
     })
 
+    // Flatten all dividend events sorted by date
+    const allDividends = []
+    Object.entries(dividendData || {}).forEach(([ticker, divs]) => {
+        divs.forEach((d) => {
+            allDividends.push({ ticker, date: d.date, amount: d.amount })
+        })
+    })
+    allDividends.sort((a, b) => (a.date > b.date ? 1 : -1))
+
+    // Build dividend payout markers by date
+    const divByDate = {}
+    allDividends.forEach((div) => {
+        if (!divByDate[div.date]) divByDate[div.date] = 0
+        divByDate[div.date] += div.amount
+    })
+
     const chartData = []
     let lastCarry = {}
 
     sortedDates.forEach((date) => {
         const sharesHeld = {}
         let deposited = 0
+        let dripDeposited = 0
         sortedTxs.forEach((tx) => {
             const txDate = tx.data.date.replace(/\//g, '-')
             if (txDate <= date) {
-                const { ticker, type, shares, price } = tx.data
+                const { ticker, type, shares, price, isDrip } = tx.data
                 if (!sharesHeld[ticker]) sharesHeld[ticker] = 0
                 if (type === 'buy') {
                     sharesHeld[ticker] += shares
                     deposited += shares * price
+                    if (isDrip) dripDeposited += shares * price
                 } else {
                     sharesHeld[ticker] -= shares
                     deposited -= shares * price
@@ -140,13 +248,42 @@ const computeChartData = (transactions, historyData) => {
             }
         })
 
+        // Compute cumulative dividends received up to this date
+        let cumulativeDividends = 0
+        allDividends.forEach((div) => {
+            if (div.date <= date) {
+                // Get shares held at ex-date
+                let sharesAtExDate = 0
+                sortedTxs.forEach((tx) => {
+                    if (tx.data.ticker !== div.ticker) return
+                    const txDate = tx.data.date.replace(/\//g, '-')
+                    if (txDate <= div.date) {
+                        if (tx.data.type === 'buy') {
+                            sharesAtExDate += tx.data.shares
+                        } else {
+                            sharesAtExDate -= tx.data.shares
+                        }
+                    }
+                })
+                if (sharesAtExDate > 0) {
+                    cumulativeDividends += sharesAtExDate * div.amount
+                }
+            }
+        })
+
         if (totalValue > 0 || deposited > 0) {
             chartData.push({
                 date,
                 value: Math.round(totalValue * 100) / 100,
                 deposited: Math.round(deposited * 100) / 100,
+                selfDeposited: Math.round((deposited - dripDeposited) * 100) / 100,
+                dividends:
+                    cumulativeDividends > 0
+                        ? Math.round(cumulativeDividends * 100) / 100
+                        : null,
                 hasBuy: !!txByDate[date]?.buy,
                 hasSell: !!txByDate[date]?.sell,
+                hasDividend: !!divByDate[date],
             })
         }
     })
@@ -179,9 +316,11 @@ export const PortfolioSection = () => {
     const [transactions, setTransactions] = useState([])
     const [quotes, setQuotes] = useState({})
     const [historyData, setHistoryData] = useState({})
+    const [dividendData, setDividendData] = useState({})
     const [holdings, setHoldings] = useState([])
     const [chartData, setChartData] = useState([])
     const [period, setPeriod] = useState('1y')
+    const [reinvestDividends, setReinvestDividends] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
     const [isChartLoading, setIsChartLoading] = useState(false)
 
@@ -230,20 +369,37 @@ export const PortfolioSection = () => {
     }, [])
 
     const fetchHistory = useCallback(async (tickers, p) => {
-        if (tickers.length === 0) return {}
+        if (tickers.length === 0) return { history: {}, dividends: {} }
         try {
             const res = await fetch(
                 `/api/stock/history?symbols=${tickers.join(',')}&period=${p}`
             )
             const data = await res.json()
-            return data.history || {}
+            return {
+                history: data.history || {},
+                dividends: data.dividends || {},
+            }
         } catch {
-            return {}
+            return { history: {}, dividends: {} }
         }
     }, [])
 
+    const recompute = useCallback(
+        (txs, quotesData, histData, divData, drip) => {
+            const effectiveTxs = drip
+                ? [
+                      ...txs,
+                      ...generateDripTransactions(txs, divData, histData),
+                  ]
+                : txs
+            setHoldings(computeHoldings(effectiveTxs, quotesData, divData))
+            setChartData(computeChartData(effectiveTxs, histData, divData))
+        },
+        [],
+    )
+
     const loadData = useCallback(
-        async (portfolioId, p = period) => {
+        async (portfolioId, p = period, drip = reinvestDividends) => {
             if (!portfolioId) return
             setIsLoading(true)
             try {
@@ -251,15 +407,21 @@ export const PortfolioSection = () => {
                 setTransactions(txs)
 
                 const tickers = [...new Set(txs.map((tx) => tx.data.ticker))]
-                const [quotesData, histData] = await Promise.all([
+                const [quotesData, histResult] = await Promise.all([
                     fetchQuotes(tickers),
                     fetchHistory(tickers, p),
                 ])
 
                 setQuotes(quotesData)
-                setHistoryData(histData)
-                setHoldings(computeHoldings(txs, quotesData))
-                setChartData(computeChartData(txs, histData))
+                setHistoryData(histResult.history)
+                setDividendData(histResult.dividends)
+                recompute(
+                    txs,
+                    quotesData,
+                    histResult.history,
+                    histResult.dividends,
+                    drip,
+                )
                 loadedPortfolioRef.current = portfolioId
             } catch (error) {
                 toast(
@@ -270,7 +432,7 @@ export const PortfolioSection = () => {
                 setIsLoading(false)
             }
         },
-        [fetchQuotes, fetchHistory, period]
+        [fetchQuotes, fetchHistory, period, reinvestDividends, recompute]
     )
 
     useEffect(() => {
@@ -286,6 +448,7 @@ export const PortfolioSection = () => {
             setTransactions([])
             setHoldings([])
             setChartData([])
+            setDividendData({})
             loadedPortfolioRef.current = null
         }
     }, [expandedId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -380,10 +543,23 @@ export const PortfolioSection = () => {
         setPeriod(newPeriod)
         setIsChartLoading(true)
         const tickers = [...new Set(transactions.map((tx) => tx.data.ticker))]
-        const histData = await fetchHistory(tickers, newPeriod)
-        setHistoryData(histData)
-        setChartData(computeChartData(transactions, histData))
+        const histResult = await fetchHistory(tickers, newPeriod)
+        setHistoryData(histResult.history)
+        setDividendData(histResult.dividends)
+        recompute(
+            transactions,
+            quotes,
+            histResult.history,
+            histResult.dividends,
+            reinvestDividends,
+        )
         setIsChartLoading(false)
+    }
+
+    const handleDripToggle = (e) => {
+        const drip = e.target.checked
+        setReinvestDividends(drip)
+        recompute(transactions, quotes, historyData, dividendData, drip)
     }
 
     const handleNewTransaction = () => {
@@ -569,6 +745,29 @@ export const PortfolioSection = () => {
                                             isLoading || isChartLoading
                                         }
                                     />
+
+                                    <Box
+                                        sx={{
+                                            display: 'flex',
+                                            justifyContent: 'flex-end',
+                                            mb: 1,
+                                        }}
+                                    >
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    size="small"
+                                                    checked={reinvestDividends}
+                                                    onChange={handleDripToggle}
+                                                />
+                                            }
+                                            label={
+                                                <Typography variant="body2">
+                                                    Reinvestiraj dividende
+                                                </Typography>
+                                            }
+                                        />
+                                    </Box>
 
                                     <HoldingsTable
                                         holdings={holdings}
