@@ -28,17 +28,18 @@ export const portfolioService = {
         return []
     },
 
-    async createPortfolio(name) {
+    async createPortfolio(name, description = '') {
         const configRef = push(ref(db, '/portfolio/configs'))
         await set(configRef, {
             name,
+            description,
             createdAt: Date.now(),
         })
         return configRef.key
     },
 
-    async renamePortfolio(key, name) {
-        await update(ref(db, `/portfolio/configs/${key}`), { name })
+    async updatePortfolio(key, fields) {
+        await update(ref(db, `/portfolio/configs/${key}`), fields)
     },
 
     async deletePortfolio(key) {

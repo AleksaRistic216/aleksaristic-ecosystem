@@ -165,8 +165,9 @@ export const PortfolioSection = () => {
     // Create/rename portfolio dialog
     const [portfolioDialogOpen, setPortfolioDialogOpen] = useState(false)
     const [portfolioDialogMode, setPortfolioDialogMode] = useState('create')
-    const [renamingPortfolioId, setRenamingPortfolioId] = useState(null)
+    const [editingPortfolioId, setEditingPortfolioId] = useState(null)
     const [portfolioName, setPortfolioName] = useState('')
+    const [portfolioDescription, setPortfolioDescription] = useState('')
     const [portfolioDialogLoading, setPortfolioDialogLoading] = useState(false)
 
     // Delete portfolio dialog
@@ -297,14 +298,16 @@ export const PortfolioSection = () => {
     const handleCreatePortfolio = () => {
         setPortfolioDialogMode('create')
         setPortfolioName('')
+        setPortfolioDescription('')
         setPortfolioDialogOpen(true)
     }
 
-    const handleRenamePortfolio = (e, portfolio) => {
+    const handleEditPortfolio = (e, portfolio) => {
         e.stopPropagation()
-        setPortfolioDialogMode('rename')
-        setRenamingPortfolioId(portfolio.key)
+        setPortfolioDialogMode('edit')
+        setEditingPortfolioId(portfolio.key)
         setPortfolioName(portfolio.data.name)
+        setPortfolioDescription(portfolio.data.description || '')
         setPortfolioDialogOpen(true)
     }
 
@@ -317,18 +320,22 @@ export const PortfolioSection = () => {
         try {
             if (portfolioDialogMode === 'create') {
                 const key = await portfolioService.createPortfolio(
-                    portfolioName.trim()
+                    portfolioName.trim(),
+                    portfolioDescription.trim()
                 )
                 await loadPortfolios()
                 setExpandedId(key)
                 toast('Portfolio kreiran', { type: 'success' })
             } else {
-                await portfolioService.renamePortfolio(
-                    renamingPortfolioId,
-                    portfolioName.trim()
+                await portfolioService.updatePortfolio(
+                    editingPortfolioId,
+                    {
+                        name: portfolioName.trim(),
+                        description: portfolioDescription.trim(),
+                    }
                 )
                 await loadPortfolios()
-                toast('Portfolio preimenovan', { type: 'success' })
+                toast('Portfolio ažuriran', { type: 'success' })
             }
             setPortfolioDialogOpen(false)
         } catch (error) {
@@ -448,19 +455,34 @@ export const PortfolioSection = () => {
                                 },
                             }}
                         >
-                            <Typography variant="subtitle1" fontWeight={600}>
-                                {p.data.name}
-                            </Typography>
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography variant="subtitle1" fontWeight={600}>
+                                    {p.data.name}
+                                </Typography>
+                                {p.data.description && (
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                        sx={{
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {p.data.description}
+                                    </Typography>
+                                )}
+                            </Box>
                             {isAdmin && (
                                 <Box
-                                    sx={{ display: 'flex', gap: 0.5 }}
+                                    sx={{ display: 'flex', gap: 0.5, ml: 1, flexShrink: 0 }}
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <Tooltip title="Preimenuj">
+                                    <Tooltip title="Uredi">
                                         <IconButton
                                             size="small"
                                             onClick={(e) =>
-                                                handleRenamePortfolio(e, p)
+                                                handleEditPortfolio(e, p)
                                             }
                                         >
                                             <Edit fontSize="small" />
@@ -621,7 +643,7 @@ export const PortfolioSection = () => {
                 <DialogTitle sx={{ pb: 1 }}>
                     {portfolioDialogMode === 'create'
                         ? 'Novi portfolio'
-                        : 'Preimenuj portfolio'}
+                        : 'Uredi portfolio'}
                 </DialogTitle>
                 <DialogContent>
                     <TextField
@@ -631,10 +653,18 @@ export const PortfolioSection = () => {
                         value={portfolioName}
                         onChange={(e) => setPortfolioName(e.target.value)}
                         disabled={portfolioDialogLoading}
-                        onKeyDown={(e) =>
-                            e.key === 'Enter' && handlePortfolioDialogSave()
-                        }
                         sx={{ mt: 1 }}
+                    />
+                    <TextField
+                        label="Opis"
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        maxRows={4}
+                        value={portfolioDescription}
+                        onChange={(e) => setPortfolioDescription(e.target.value)}
+                        disabled={portfolioDialogLoading}
+                        sx={{ mt: 2 }}
                     />
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
