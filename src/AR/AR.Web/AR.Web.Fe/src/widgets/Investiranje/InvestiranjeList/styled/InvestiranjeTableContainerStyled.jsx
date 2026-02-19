@@ -6,7 +6,7 @@ export const InvestiranjeTableContainerStyled = styled(TableContainer)(
         max-width: 800px;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        overflow: hidden;
+        overflow-x: auto;
 
         thead {
             background-color: ${theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50]};

@@ -21,6 +21,9 @@ export const NavigationMenu = () => {
             }}
             onMouseLeave={() => {
                 setIsShown(false)
+            }}
+            onClick={() => {
+                setIsShown((prev) => !prev)
             }}>
             <ItemsWrapper innerRef={itemsWrapper} isShown={isShown}></ItemsWrapper>
             <Notch isShown={isShown}></Notch>

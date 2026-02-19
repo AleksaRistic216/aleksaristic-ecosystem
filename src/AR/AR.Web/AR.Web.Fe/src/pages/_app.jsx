@@ -35,31 +35,34 @@ export default function MyApp({ Component, pageProps }) {
         }
     }, [])
 
+    const isInvestiranje = router.pathname.startsWith('/investiranje')
+
     return (
         <PostHogProvider client={posthog}>
             <ThemeProvider theme={mainTheme}>
                 <AuthProvider>
+                    {!isInvestiranje && (
+                        <Stack
+                            alignItems={`center`}
+                            justifyContent={`center`}
+                            sx={{
+                                height: `100vh`,
+                                display: {
+                                    xs: 'grid',
+                                    lg: 'none',
+                                },
+                            }}
+                        >
+                            <Typography>
+                                This website is accessible only on PC
+                            </Typography>
+                        </Stack>
+                    )}
                     <Stack
-                        alignItems={`center`}
-                        justifyContent={`center`}
                         sx={{
-                            height: `100vh`,
-                            display: {
-                                xs: 'grid',
-                                lg: 'none',
-                            },
-                        }}
-                    >
-                        <Typography>
-                            This website is accessible only on PC
-                        </Typography>
-                    </Stack>
-                    <Stack
-                        sx={{
-                            display: {
-                                xs: 'none',
-                                lg: 'grid',
-                            },
+                            display: isInvestiranje
+                                ? 'grid'
+                                : { xs: 'none', lg: 'grid' },
                         }}
                     >
                         <ToastContainer position={`top-right`} />
