@@ -9,6 +9,8 @@ const Investiranje = () => {
                 sx={{
                     maxWidth: `100vw`,
                     overflowY: `scroll`,
+                    flex: 1,
+                    minHeight: 0,
                 }}
             >
                 <InvestiranjeList />

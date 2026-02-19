@@ -649,8 +649,8 @@ export const PortfolioSection = () => {
     }
 
     return (
-        <Grid item sm={12} sx={{ mb: 4 }}>
-            <Box sx={{ maxWidth: 800, margin: '0 auto' }}>
+        <Grid item xs={12} sx={{ mb: 4 }}>
+            <Box sx={{ maxWidth: 800, margin: '0 auto', width: '100%' }}>
                 {portfolios.map((p, index) => (
                     <Accordion
                         key={p.key}

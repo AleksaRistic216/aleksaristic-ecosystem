@@ -54,14 +54,16 @@ const InvestiranjeSrc = () => {
             <Grid
                 sx={{
                     overflowY: `auto`,
+                    flex: 1,
+                    minHeight: 0,
                 }}
             >
                 <Grid
                     container
                     justifyContent={`center`}
                     sx={{
-                        py: 10,
-                        px: 4,
+                        py: { xs: 4, sm: 10 },
+                        px: { xs: 2, sm: 4 },
                         maxWidth: `lg`,
                         margin: `auto`,
                     }}
@@ -81,7 +83,14 @@ const InvestiranjeSrc = () => {
                         </Typography>
                     </Grid>
                     <Grid item xs={12}>
-                        {parse(post.text)}
+                        <Box sx={{
+                            '& img': { maxWidth: '100%', height: 'auto' },
+                            '& table': { display: 'block', overflowX: 'auto', width: '100%' },
+                            '& pre': { overflowX: 'auto' },
+                            '& iframe': { maxWidth: '100%' },
+                        }}>
+                            {parse(post.text)}
+                        </Box>
                     </Grid>
                 </Grid>
             </Grid>
