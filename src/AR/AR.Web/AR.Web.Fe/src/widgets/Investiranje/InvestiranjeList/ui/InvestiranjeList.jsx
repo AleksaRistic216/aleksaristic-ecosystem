@@ -17,12 +17,12 @@ export const InvestiranjeList = () => {
     }
 
     return (
-        <Grid container justifyContent="center" py={15} maxWidth="100vw">
-            <Grid item sm={12} sx={{ textAlign: 'center', p: 2 }}>
+        <Grid container justifyContent="center" py={{ xs: 4, sm: 15 }} maxWidth="100vw">
+            <Grid item xs={12} sx={{ textAlign: 'center', p: 2 }}>
                 <Grid spacing={2} container justifyContent="center">
                     <Grid
                         item
-                        sm={12}
+                        xs={12}
                         sx={{
                             display: 'flex',
                             justifyContent: 'flex-end',
@@ -33,7 +33,7 @@ export const InvestiranjeList = () => {
                     >
                         <AuthButton />
                     </Grid>
-                    <Grid item sm={12}>
+                    <Grid item xs={12}>
                         <Typography
                             component="h1"
                             variant="h4"
@@ -42,9 +42,9 @@ export const InvestiranjeList = () => {
                             Investiranje
                         </Typography>
                     </Grid>
-                    <Grid item sm={12}>
+                    <Grid item xs={12}>
                         <Grid container justifyContent="center">
-                            <Grid item sm={4}>
+                            <Grid item xs={10} sm={4}>
                                 <Typography
                                     component="h3"
                                     variant="body2"
@@ -57,7 +57,7 @@ export const InvestiranjeList = () => {
                         </Grid>
                     </Grid>
                     <PortfolioSection />
-                    <Grid item sm={12} sx={{ mt: 4 }}>
+                    <Grid item xs={12} sx={{ mt: 4 }}>
                         <Typography
                             component="h2"
                             variant="h5"
@@ -67,7 +67,7 @@ export const InvestiranjeList = () => {
                         </Typography>
                     </Grid>
                     {isAdmin && (
-                        <Grid item sm={12} sx={{ mt: 1 }}>
+                        <Grid item xs={12} sx={{ mt: 1 }}>
                             <Button
                                 variant="contained"
                                 startIcon={<Add />}
