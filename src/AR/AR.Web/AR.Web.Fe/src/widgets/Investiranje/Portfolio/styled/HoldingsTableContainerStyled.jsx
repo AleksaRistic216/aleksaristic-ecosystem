@@ -18,7 +18,7 @@ export const HoldingsTableContainerStyled = styled(TableContainer)(
             font-size: 0.75rem;
             letter-spacing: 0.5px;
             color: ${theme.palette.text.secondary};
-            padding: 12px 12px;
+            padding: 8px 8px;
             border-bottom: 2px solid ${theme.palette.divider};
             white-space: nowrap;
         }
@@ -26,23 +26,45 @@ export const HoldingsTableContainerStyled = styled(TableContainer)(
         thead th:first-of-type,
         tbody td:first-of-type,
         tbody th:first-of-type {
-            padding-left: 24px;
+            padding-left: 12px;
         }
 
         thead th:last-of-type,
         tbody td:last-of-type,
         tbody th:last-of-type {
-            padding-right: 24px;
+            padding-right: 12px;
         }
 
         tbody td, tbody th {
-            padding: 12px 12px;
+            padding: 8px 8px;
             transition: background-color 0.15s ease;
         }
 
         tbody > tr:not(:last-child) td,
         tbody > tr:not(:last-child) th {
             border-bottom: 1px solid ${theme.palette.divider};
+        }
+
+        ${theme.breakpoints.up('sm')} {
+            thead th {
+                padding: 12px 12px;
+            }
+
+            thead th:first-of-type,
+            tbody td:first-of-type,
+            tbody th:first-of-type {
+                padding-left: 24px;
+            }
+
+            thead th:last-of-type,
+            tbody td:last-of-type,
+            tbody th:last-of-type {
+                padding-right: 24px;
+            }
+
+            tbody td, tbody th {
+                padding: 12px 12px;
+            }
         }
     `
 )
