@@ -7,7 +7,9 @@ const PersonalBlog = () => {
         <Layout>
             <Grid sx={{
                 maxWidth: `100vw`,
-                overflowY: `scroll`
+                overflowY: `scroll`,
+                flex: 1,
+                minHeight: 0
             }}>
                 <PersonalBlogList />
             </Grid>

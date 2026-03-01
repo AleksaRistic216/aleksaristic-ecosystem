@@ -6,7 +6,7 @@ export const PersonalBlogTableContainerStyled = styled(TableContainer)(
         max-width: 800px;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        overflow: hidden;
+        overflow-x: auto;
 
         thead {
             background-color: ${theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50]};
@@ -18,13 +18,25 @@ export const PersonalBlogTableContainerStyled = styled(TableContainer)(
             font-size: 0.75rem;
             letter-spacing: 0.5px;
             color: ${theme.palette.text.secondary};
-            padding: 16px 24px;
+            padding: 8px 8px;
             border-bottom: 2px solid ${theme.palette.divider};
         }
 
+        ${theme.breakpoints.up('sm')} {
+            thead th {
+                padding: 16px 24px;
+            }
+        }
+
         tbody td, tbody th {
-            padding: 16px 24px;
+            padding: 8px 8px;
             transition: background-color 0.15s ease;
+        }
+
+        ${theme.breakpoints.up('sm')} {
+            tbody td, tbody th {
+                padding: 16px 24px;
+            }
         }
 
         tbody > tr {

@@ -35,13 +35,13 @@ export default function MyApp({ Component, pageProps }) {
         }
     }, [])
 
-    const isInvestiranje = router.pathname.startsWith('/investiranje')
+    const isMobileEnabled = router.pathname.startsWith('/investiranje') || router.pathname.startsWith('/personal-blog')
 
     return (
         <PostHogProvider client={posthog}>
             <ThemeProvider theme={mainTheme}>
                 <AuthProvider>
-                    {!isInvestiranje && (
+                    {!isMobileEnabled && (
                         <Stack
                             alignItems={`center`}
                             justifyContent={`center`}
@@ -60,7 +60,7 @@ export default function MyApp({ Component, pageProps }) {
                     )}
                     <Stack
                         sx={{
-                            display: isInvestiranje
+                            display: isMobileEnabled
                                 ? 'grid'
                                 : { xs: 'none', lg: 'grid' },
                         }}
