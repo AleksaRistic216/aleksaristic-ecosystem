@@ -8,6 +8,7 @@ import {
     CircularProgress,
     Divider,
     FormControl,
+    FormControlLabel,
     Grid,
     IconButton,
     InputLabel,
@@ -24,6 +25,7 @@ import {
     Typography,
 } from '@mui/material'
 import {
+    AccountBalance,
     ArrowBack,
     CalendarMonth,
     Delete,
@@ -33,6 +35,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
+import { statementToCsv, statementToPdf } from '../../utils/statementExport'
 
 const MONTHS = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -64,28 +67,38 @@ export const EnvelopeView = () => {
     const router = useRouter()
     const [invoices, setInvoices] = useState([])
     const [receivers, setReceivers] = useState([])
+    const [statements, setStatements] = useState([])
     const [emailSettings, setEmailSettings] = useState(null)
     const [envelope, setEnvelope] = useState([])
     const [subject, setSubject] = useState('LimitlessSoft - Dokumentacija')
     const [body, setBody] = useState('')
     const [sending, setSending] = useState(false)
+    const [statementFormat, setStatementFormat] = useState('pdf')
     const [filterType, setFilterType] = useState('all')
-    const [filterDateFrom, setFilterDateFrom] = useState(
-        `${new Date().getFullYear()}-01-01`,
-    )
-    const [filterDateTo, setFilterDateTo] = useState(
-        `${new Date().getFullYear()}-12-31`,
-    )
+    const [filterDateFrom, setFilterDateFrom] = useState(() => {
+        const now = new Date()
+        const y = now.getFullYear()
+        const m = String(now.getMonth() + 1).padStart(2, '0')
+        return `${y}-${m}-01`
+    })
+    const [filterDateTo, setFilterDateTo] = useState(() => {
+        const now = new Date()
+        const y = now.getFullYear()
+        const m = now.getMonth()
+        return `${y}-${String(m + 1).padStart(2, '0')}-${lastDayOfMonth(y, m)}`
+    })
     const [dateMenuAnchor, setDateMenuAnchor] = useState(null)
 
     useEffect(() => {
         const unsub1 = poslovanjService.onInvoices(setInvoices)
         const unsub2 = poslovanjService.onReceivers(setReceivers)
         const unsub3 = poslovanjService.onEmailSettings(setEmailSettings)
+        const unsub4 = poslovanjService.onStatements(setStatements)
         return () => {
             unsub1()
             unsub2()
             unsub3()
+            unsub4()
         }
     }, [])
 
@@ -129,6 +142,63 @@ export const EnvelopeView = () => {
             .filter((inv) => inv.parsedAttachments.length > 0)
     }, [invoices, receivers, filterType, filterDateFrom, filterDateTo])
 
+    const filteredStatements = useMemo(() => {
+        if (filterType !== 'all' && filterType !== 'statement') return []
+        const from = filterDateFrom ? new Date(filterDateFrom) : null
+        const to = filterDateTo ? new Date(filterDateTo + 'T23:59:59') : null
+
+        return statements
+            .filter((s) => {
+                if (!from && !to) return true
+                const parts = s.datumIzvoda?.split('.')
+                if (!parts || parts.length < 3) return false
+                const d = new Date(
+                    `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`,
+                )
+                if (isNaN(d.getTime())) return false
+                if (from && d < from) return false
+                if (to && d > to) return false
+                return true
+            })
+            .sort((a, b) => {
+                const da = a.datumIzvoda.split('.').reverse().join('')
+                const db = b.datumIzvoda.split('.').reverse().join('')
+                return db.localeCompare(da)
+            })
+    }, [statements, filterType, filterDateFrom, filterDateTo])
+
+    const toggleStatement = (statement) => {
+        const id = `stmt::${statement.key}`
+        setEnvelope((prev) => {
+            const exists = prev.find((e) => e.id === id)
+            if (exists) return prev.filter((e) => e.id !== id)
+
+            const label = `Statement #${statement.brojIzvoda} (${statement.datumIzvoda})`
+            const ext = statementFormat === 'pdf' ? 'pdf' : 'csv'
+            const fileName = `izvod_${statement.partija}_${statement.brojIzvoda}_${statement.datumIzvoda.replace(/\./g, '-')}.${ext}`
+            const data =
+                statementFormat === 'pdf'
+                    ? statementToPdf(statement)
+                    : statementToCsv(statement)
+
+            return [
+                ...prev,
+                {
+                    id,
+                    statementKey: statement.key,
+                    invoiceLabel: label,
+                    name: fileName,
+                    data,
+                    type: statementFormat === 'pdf' ? 'application/pdf' : 'text/csv',
+                },
+            ]
+        })
+    }
+
+    const isStatementInEnvelope = (key) => {
+        return envelope.some((e) => e.id === `stmt::${key}`)
+    }
+
     const toggleAttachment = (invoiceKey, attachment, invoiceLabel) => {
         const id = `${invoiceKey}::${attachment.key}`
         setEnvelope((prev) => {
@@ -155,6 +225,73 @@ export const EnvelopeView = () => {
 
     const isInEnvelope = (invoiceKey, attachmentKey) => {
         return envelope.some((e) => e.id === `${invoiceKey}::${attachmentKey}`)
+    }
+
+    const allSelected = useMemo(() => {
+        const ids = []
+        if (filterType !== 'statement') {
+            invoicesWithAttachments.forEach((inv) => {
+                const fullNumber = (inv.receiverSnapshot?.invoicePrefix || receiverMap[inv.receiverId]?.invoicePrefix || '') + inv.invoiceNumber
+                inv.parsedAttachments.forEach((att) => {
+                    ids.push({
+                        id: `${inv.key}::${att.key}`,
+                        invoiceKey: inv.key,
+                        attachmentKey: att.key,
+                        invoiceLabel: fullNumber,
+                        name: att.name,
+                        data: att.data,
+                        type: att.type,
+                    })
+                })
+            })
+        }
+        if (filterType !== 'invoice') {
+            filteredStatements.forEach((s) => {
+                const label = `Statement #${s.brojIzvoda} (${s.datumIzvoda})`
+                const ext = statementFormat === 'pdf' ? 'pdf' : 'csv'
+                const fileName = `izvod_${s.partija}_${s.brojIzvoda}_${s.datumIzvoda.replace(/\./g, '-')}.${ext}`
+                ids.push({
+                    id: `stmt::${s.key}`,
+                    statementKey: s.key,
+                    invoiceLabel: label,
+                    name: fileName,
+                    statement: s,
+                })
+            })
+        }
+        return ids
+    }, [invoicesWithAttachments, filteredStatements, filterType, statementFormat, receiverMap])
+
+    const isAllChecked = allSelected.length > 0 && allSelected.every((item) => envelope.some((e) => e.id === item.id))
+
+    const handleToggleAll = () => {
+        if (isAllChecked) {
+            const ids = new Set(allSelected.map((i) => i.id))
+            setEnvelope((prev) => prev.filter((e) => !ids.has(e.id)))
+        } else {
+            setEnvelope((prev) => {
+                const existing = new Set(prev.map((e) => e.id))
+                const toAdd = allSelected
+                    .filter((item) => !existing.has(item.id))
+                    .map((item) => {
+                        if (item.statement) {
+                            const data = statementFormat === 'pdf'
+                                ? statementToPdf(item.statement)
+                                : statementToCsv(item.statement)
+                            return {
+                                id: item.id,
+                                statementKey: item.statementKey,
+                                invoiceLabel: item.invoiceLabel,
+                                name: item.name,
+                                data,
+                                type: statementFormat === 'pdf' ? 'application/pdf' : 'text/csv',
+                            }
+                        }
+                        return item
+                    })
+                return [...prev, ...toAdd]
+            })
+        }
     }
 
     const handleSend = async () => {
@@ -193,13 +330,22 @@ export const EnvelopeView = () => {
             if (!res.ok) throw new Error(data.error)
 
             await Promise.all(
-                envelope.map((e) =>
-                    poslovanjService.markAttachmentSent(
-                        e.invoiceKey,
-                        e.attachmentKey,
-                        emailSettings.bookkeeperEmail,
-                    ),
-                ),
+                envelope.map((e) => {
+                    if (e.statementKey) {
+                        return poslovanjService.markStatementSent(
+                            e.statementKey,
+                            emailSettings.bookkeeperEmail,
+                        )
+                    }
+                    if (e.invoiceKey && e.attachmentKey) {
+                        return poslovanjService.markAttachmentSent(
+                            e.invoiceKey,
+                            e.attachmentKey,
+                            emailSettings.bookkeeperEmail,
+                        )
+                    }
+                    return Promise.resolve()
+                }),
             )
 
             toast('Envelope sent successfully', { type: 'success' })
@@ -256,6 +402,7 @@ export const EnvelopeView = () => {
                                 >
                                     <MenuItem value="all">All</MenuItem>
                                     <MenuItem value="invoice">Invoice</MenuItem>
+                                    <MenuItem value="statement">Bank Statement</MenuItem>
                                 </Select>
                             </FormControl>
                             <Chip
@@ -270,6 +417,25 @@ export const EnvelopeView = () => {
                             >
                                 <CalendarMonth fontSize="small" />
                             </IconButton>
+                            {allSelected.length > 0 && (
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            size="small"
+                                            checked={isAllChecked}
+                                            indeterminate={
+                                                !isAllChecked &&
+                                                allSelected.some((item) =>
+                                                    envelope.some((e) => e.id === item.id),
+                                                )
+                                            }
+                                            onChange={handleToggleAll}
+                                        />
+                                    }
+                                    label="Select all"
+                                    sx={{ ml: 0.5, '& .MuiTypography-root': { fontSize: '0.85rem' } }}
+                                />
+                            )}
                             <Menu
                                 anchorEl={dateMenuAnchor}
                                 open={!!dateMenuAnchor}
@@ -345,7 +511,8 @@ export const EnvelopeView = () => {
                                 ))}
                             </Menu>
                         </Box>
-                        {invoicesWithAttachments.length === 0 && (
+                        {filterType !== 'statement' &&
+                            invoicesWithAttachments.length === 0 && (
                             <Paper
                                 variant="outlined"
                                 sx={{
@@ -357,7 +524,7 @@ export const EnvelopeView = () => {
                                 No invoices with attachments found
                             </Paper>
                         )}
-                        {invoicesWithAttachments.map((inv) => {
+                        {filterType !== 'statement' && invoicesWithAttachments.map((inv) => {
                             const fullNumber =
                                 inv.prefix + inv.invoiceNumber
                             return (
@@ -447,6 +614,93 @@ export const EnvelopeView = () => {
                                 </Paper>
                             )
                         })}
+                        {filterType !== 'invoice' && filteredStatements.length > 0 && (
+                            <>
+                                <Typography
+                                    variant="subtitle2"
+                                    fontWeight={600}
+                                    sx={{
+                                        mt: filterType === 'all' ? 2 : 0,
+                                        mb: 1,
+                                    }}
+                                >
+                                    Bank Statements
+                                </Typography>
+                                {filteredStatements.map((s) => (
+                                    <Paper
+                                        key={s.key}
+                                        variant="outlined"
+                                        sx={{ mb: 1.5, p: 2 }}
+                                    >
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                            }}
+                                        >
+                                            <Checkbox
+                                                size="small"
+                                                checked={isStatementInEnvelope(s.key)}
+                                                onChange={() => toggleStatement(s)}
+                                                sx={{ mr: 1 }}
+                                            />
+                                            <AccountBalance
+                                                fontSize="small"
+                                                sx={{ mr: 1, color: 'text.secondary' }}
+                                            />
+                                            <Box>
+                                                <Typography
+                                                    variant="subtitle2"
+                                                    fontWeight={600}
+                                                >
+                                                    #{s.brojIzvoda} — {s.datumIzvoda}
+                                                    <Chip
+                                                        label={s.valuta || 'RSD'}
+                                                        size="small"
+                                                        sx={{ ml: 1 }}
+                                                    />
+                                                    <Chip
+                                                        label={s.partija}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ ml: 0.5 }}
+                                                    />
+                                                </Typography>
+                                                <Typography
+                                                    variant="caption"
+                                                    color="text.secondary"
+                                                >
+                                                    Balance: {(s.novoStanje || 0).toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {s.valuta || 'RSD'}
+                                                </Typography>
+                                                {s.sendHistory && (
+                                                    <Typography
+                                                        variant="caption"
+                                                        sx={{ color: '#2e7d32', whiteSpace: 'pre-line', display: 'block' }}
+                                                    >
+                                                        {Object.values(s.sendHistory)
+                                                            .sort((a, b) => b.sentAt - a.sentAt)
+                                                            .map((h) => `${new Date(h.sentAt).toLocaleDateString()} \u2192 ${h.sentTo}`)
+                                                            .join('\n')}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+                                        </Box>
+                                    </Paper>
+                                ))}
+                            </>
+                        )}
+                        {filterType !== 'invoice' && filteredStatements.length === 0 && filterType === 'statement' && (
+                            <Paper
+                                variant="outlined"
+                                sx={{
+                                    p: 4,
+                                    textAlign: 'center',
+                                    color: 'text.secondary',
+                                }}
+                            >
+                                No bank statements found
+                            </Paper>
+                        )}
                     </Grid>
 
                     <Grid item xs={12} md={5}>
@@ -491,6 +745,50 @@ export const EnvelopeView = () => {
 
                             <Divider sx={{ mb: 1.5 }} />
 
+                            {envelope.some((e) => e.id.startsWith('stmt::')) && (
+                                <Box
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        mb: 1.5,
+                                    }}
+                                >
+                                    <Typography variant="caption" color="text.secondary">
+                                        Statement format:
+                                    </Typography>
+                                    <FormControl size="small" sx={{ minWidth: 80 }}>
+                                        <Select
+                                            value={statementFormat}
+                                            onChange={(e) => {
+                                                const fmt = e.target.value
+                                                setStatementFormat(fmt)
+                                                setEnvelope((prev) =>
+                                                    prev.map((item) => {
+                                                        if (!item.id.startsWith('stmt::')) return item
+                                                        const s = statements.find((st) => st.key === item.statementKey)
+                                                        if (!s) return item
+                                                        const ext = fmt === 'pdf' ? 'pdf' : 'csv'
+                                                        const fileName = `izvod_${s.partija}_${s.brojIzvoda}_${s.datumIzvoda.replace(/\./g, '-')}.${ext}`
+                                                        const data = fmt === 'pdf' ? statementToPdf(s) : statementToCsv(s)
+                                                        return {
+                                                            ...item,
+                                                            name: fileName,
+                                                            data,
+                                                            type: fmt === 'pdf' ? 'application/pdf' : 'text/csv',
+                                                        }
+                                                    }),
+                                                )
+                                            }}
+                                            sx={{ fontSize: '0.8rem', height: 28 }}
+                                        >
+                                            <MenuItem value="pdf">PDF</MenuItem>
+                                            <MenuItem value="csv">CSV</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Box>
+                            )}
+
                             {envelope.length === 0 ? (
                                 <Typography
                                     variant="body2"
@@ -522,10 +820,17 @@ export const EnvelopeView = () => {
                                             <ListItemIcon
                                                 sx={{ minWidth: 28 }}
                                             >
-                                                <InsertDriveFile
-                                                    fontSize="small"
-                                                    color="action"
-                                                />
+                                                {item.id.startsWith('stmt::') ? (
+                                                    <AccountBalance
+                                                        fontSize="small"
+                                                        color="action"
+                                                    />
+                                                ) : (
+                                                    <InsertDriveFile
+                                                        fontSize="small"
+                                                        color="action"
+                                                    />
+                                                )}
                                             </ListItemIcon>
                                             <ListItemText
                                                 primary={item.name}

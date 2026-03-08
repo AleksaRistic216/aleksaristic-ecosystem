@@ -178,6 +178,13 @@ export const poslovanjService = {
         return newRef.key
     },
 
+    async markStatementSent(key, sentTo) {
+        const historyRef = push(
+            ref(db, `/poslovanje-statements/${key}/sendHistory`),
+        )
+        await set(historyRef, { sentAt: Date.now(), sentTo })
+    },
+
     async deleteStatement(key) {
         await remove(ref(db, `/poslovanje-statements/${key}`))
     },
