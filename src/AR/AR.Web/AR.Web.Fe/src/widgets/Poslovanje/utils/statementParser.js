@@ -11,6 +11,16 @@ export const parseStatementXml = (xmlString) => {
     const attr = (el, name) => el.getAttribute(name) || ''
     const num = (el, name) => parseFloat(el.getAttribute(name)) || 0
 
+    const sifraValuteMap = { '941': 'RSD', '840': 'USD', '978': 'EUR' }
+    const resolveValuta = (el) => {
+        const oznaka = attr(el, 'OznakaValute')
+        if (oznaka) return oznaka
+        const sifra = attr(el, 'SifraValute')
+        if (sifra && sifraValuteMap[sifra]) return sifraValuteMap[sifra]
+        if (sifra) return sifra
+        return 'RSD'
+    }
+
     const stavkeEls = doc.querySelectorAll('Stavke')
     const stavke = Array.from(stavkeEls).map((el) => ({
         nalogKorisnik: attr(el, 'NalogKorisnik'),
@@ -40,6 +50,7 @@ export const parseStatementXml = (xmlString) => {
         komitentAdresa: attr(zaglavlje, 'KomitentAdresa'),
         komitentMesto: attr(zaglavlje, 'KomitentMesto'),
         partija: attr(zaglavlje, 'Partija'),
+        valuta: resolveValuta(zaglavlje),
         tipRacuna: attr(zaglavlje, 'TipRacuna'),
         prethodnoStanje: num(zaglavlje, 'PrethodnoStanje'),
         dugovniPromet: num(zaglavlje, 'DugovniPromet'),

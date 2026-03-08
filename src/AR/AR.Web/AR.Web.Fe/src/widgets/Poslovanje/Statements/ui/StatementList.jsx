@@ -19,6 +19,7 @@ import {
     TableHead,
     TableRow,
     Typography,
+    LinearProgress,
 } from '@mui/material'
 import {
     Add,
@@ -43,6 +44,7 @@ export const StatementList = () => {
     const [statements, setStatements] = useState([])
     const [filterAccount, setFilterAccount] = useState('')
     const [previewStatement, setPreviewStatement] = useState(null)
+    const [importing, setImporting] = useState(false)
     const fileInputRef = useRef(null)
 
     useEffect(() => {
@@ -76,41 +78,46 @@ export const StatementList = () => {
         const files = Array.from(e.target.files || [])
         if (files.length === 0) return
 
+        setImporting(true)
         let imported = 0
         let skipped = 0
         const importedIds = new Set()
 
-        for (const file of files) {
-            try {
-                const text = await file.text()
-                const parsed = parseStatementXml(text)
+        try {
+            for (const file of files) {
+                try {
+                    const text = await file.text()
+                    const parsed = parseStatementXml(text)
 
-                const uid = `${parsed.partija}::${parsed.brojIzvoda}::${parsed.datumIzvoda}`
-                const exists = statements.some(
-                    (s) =>
-                        `${s.partija}::${s.brojIzvoda}::${s.datumIzvoda}` ===
-                        uid,
-                )
-                if (exists || importedIds.has(uid)) {
-                    skipped++
-                    continue
+                    const uid = `${parsed.partija}::${parsed.brojIzvoda}::${parsed.datumIzvoda}`
+                    const exists = statements.some(
+                        (s) =>
+                            `${s.partija}::${s.brojIzvoda}::${s.datumIzvoda}` ===
+                            uid,
+                    )
+                    if (exists || importedIds.has(uid)) {
+                        skipped++
+                        continue
+                    }
+
+                    await poslovanjService.createStatement(parsed)
+                    importedIds.add(uid)
+                    imported++
+                } catch (error) {
+                    toast(`Failed to parse ${file.name}: ${error.message}`, {
+                        type: 'error',
+                    })
                 }
-
-                await poslovanjService.createStatement(parsed)
-                importedIds.add(uid)
-                imported++
-            } catch (error) {
-                toast(`Failed to parse ${file.name}: ${error.message}`, {
-                    type: 'error',
-                })
             }
-        }
 
-        if (imported > 0) {
-            toast(`Imported ${imported} statement(s)`, { type: 'success' })
-        }
-        if (skipped > 0) {
-            toast(`Skipped ${skipped} duplicate(s)`, { type: 'info' })
+            if (imported > 0) {
+                toast(`Imported ${imported} statement(s)`, { type: 'success' })
+            }
+            if (skipped > 0) {
+                toast(`Skipped ${skipped} duplicate(s)`, { type: 'info' })
+            }
+        } finally {
+            setImporting(false)
         }
     }
 
@@ -192,9 +199,10 @@ export const StatementList = () => {
                             variant="contained"
                             startIcon={<Add />}
                             onClick={handleImport}
+                            disabled={importing}
                             sx={{ textTransform: 'none' }}
                         >
-                            Import
+                            {importing ? 'Importing...' : 'Import'}
                         </Button>
                     </Box>
                 </Box>
@@ -225,6 +233,8 @@ export const StatementList = () => {
                         </Select>
                     </FormControl>
                 </Box>
+
+                {importing && <LinearProgress sx={{ mb: 1 }} />}
 
                 <TableContainer component={Paper} variant="outlined">
                     <Table size="small">
@@ -283,7 +293,7 @@ export const StatementList = () => {
                                         />
                                     </TableCell>
                                     <TableCell align="right">
-                                        {fmtNum(s.prethodnoStanje)}
+                                        {fmtNum(s.prethodnoStanje)} {s.valuta}
                                     </TableCell>
                                     <TableCell
                                         align="right"
@@ -294,7 +304,7 @@ export const StatementList = () => {
                                                     : undefined,
                                         }}
                                     >
-                                        {fmtNum(s.dugovniPromet)}
+                                        {fmtNum(s.dugovniPromet)} {s.valuta}
                                     </TableCell>
                                     <TableCell
                                         align="right"
@@ -305,13 +315,13 @@ export const StatementList = () => {
                                                     : undefined,
                                         }}
                                     >
-                                        {fmtNum(s.potrazniPromet)}
+                                        {fmtNum(s.potrazniPromet)} {s.valuta}
                                     </TableCell>
                                     <TableCell
                                         align="right"
                                         sx={{ fontWeight: 600 }}
                                     >
-                                        {fmtNum(s.novoStanje)}
+                                        {fmtNum(s.novoStanje)} {s.valuta}
                                     </TableCell>
                                     <TableCell align="center">
                                         <IconButton

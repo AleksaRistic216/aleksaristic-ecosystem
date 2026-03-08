@@ -113,7 +113,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                             Previous Balance
                         </Typography>
                         <Typography variant="h6">
-                            {fmtNum(statement.prethodnoStanje)}
+                            {fmtNum(statement.prethodnoStanje)} {statement.valuta}
                         </Typography>
                     </Box>
                     <Box>
@@ -121,7 +121,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                             Debit
                         </Typography>
                         <Typography variant="h6" sx={{ color: '#d32f2f' }}>
-                            -{fmtNum(statement.dugovniPromet)}
+                            -{fmtNum(statement.dugovniPromet)} {statement.valuta}
                         </Typography>
                     </Box>
                     <Box>
@@ -129,7 +129,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                             Credit
                         </Typography>
                         <Typography variant="h6" sx={{ color: '#2e7d32' }}>
-                            +{fmtNum(statement.potrazniPromet)}
+                            +{fmtNum(statement.potrazniPromet)} {statement.valuta}
                         </Typography>
                     </Box>
                     <Box>
@@ -137,7 +137,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                             New Balance
                         </Typography>
                         <Typography variant="h6" fontWeight={700}>
-                            {fmtNum(statement.novoStanje)}
+                            {fmtNum(statement.novoStanje)} {statement.valuta}
                         </Typography>
                     </Box>
                 </Box>
@@ -214,7 +214,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                                         }}
                                     >
                                         {s.duguje > 0
-                                            ? fmtNum(s.duguje)
+                                            ? `${fmtNum(s.duguje)} ${statement.valuta}`
                                             : ''}
                                     </TableCell>
                                     <TableCell
@@ -227,7 +227,7 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                                         }}
                                     >
                                         {s.potrazuje > 0
-                                            ? fmtNum(s.potrazuje)
+                                            ? `${fmtNum(s.potrazuje)} ${statement.valuta}`
                                             : ''}
                                     </TableCell>
                                     <TableCell>{s.datumValute}</TableCell>
