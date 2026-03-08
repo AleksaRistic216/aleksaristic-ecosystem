@@ -35,7 +35,7 @@ export default function MyApp({ Component, pageProps }) {
         }
     }, [])
 
-    const isMobileEnabled = router.pathname.startsWith('/investiranje') || router.pathname.startsWith('/personal-blog')
+    const isMobileEnabled = router.pathname.startsWith('/investiranje') || router.pathname.startsWith('/personal-blog') || router.pathname.startsWith('/poslovanje')
 
     return (
         <PostHogProvider client={posthog}>
