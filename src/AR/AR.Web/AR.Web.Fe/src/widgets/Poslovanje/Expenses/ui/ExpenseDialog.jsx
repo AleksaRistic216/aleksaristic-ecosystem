@@ -73,6 +73,8 @@ export const ExpenseDialog = ({
     statements,
     partners,
     defaultPartnerKey,
+    allExpenses = [],
+    defaultTransaction,
 }) => {
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -102,14 +104,44 @@ export const ExpenseDialog = ({
             setPartnerKey(expense.partnerKey || '')
             setPaymentMethod(expense.paymentMethod || 'bank_account')
             setBankAccount(expense.bankAccount || '')
-            setSelectedTransaction(
-                expense.transactionRef
-                    ? {
-                          id: expense.transactionRef,
-                          label: expense.transactionLabel || '',
-                      }
-                    : null,
-            )
+            if (expense.transactionRef) {
+                let label = expense.transactionLabel || ''
+                const [stmtKey, idxStr] = expense.transactionRef.split('::')
+                const stmt = statements.find((s) => s.key === stmtKey)
+                if (stmt) {
+                    const stavke = normalizeStavke(stmt.stavke)
+                    const stavka = stavke[Number(idxStr)]
+                    if (stavka) {
+                        const bankAmount = stavka.duguje > 0
+                            ? stavka.duguje
+                            : stavka.potrazuje
+                        const expAmount = expense.amount || 0
+                        if (Math.abs(bankAmount - expAmount) > 0.01) {
+                            label = `${stavka.datumValute} | ${fmtNum(expAmount)} of ${fmtNum(bankAmount)} ${stmt.valuta || 'RSD'} | ${stavka.nalogKorisnik || ''}${stavka.opis ? ' - ' + stavka.opis : ''}`
+                        }
+                    }
+                }
+                setSelectedTransaction({ id: expense.transactionRef, label })
+            } else {
+                setSelectedTransaction(null)
+            }
+        } else if (defaultTransaction) {
+            const tx = defaultTransaction
+            const txId = `${tx.statementKey}::${tx.index}`
+            const desc = tx.opis
+                ? `${tx.nalogKorisnik} - ${tx.opis}`
+                : tx.nalogKorisnik
+            const label = `${tx.datumValute} | ${fmtNum(tx.amount)} ${tx.currency} | ${tx.nalogKorisnik}${tx.opis ? ' - ' + tx.opis : ''}`
+            setDescription(desc)
+            setAmount(tx.amount)
+            setCurrency(tx.currency)
+            setDate(parseSerbianDate(tx.datumValute))
+            setStatus('paid')
+            setPartnerKey(defaultPartnerKey || '')
+            setPaymentMethod('bank_account')
+            setBankAccount(tx.partija)
+            setSelectedTransaction({ id: txId, label })
+            setPendingFiles([])
         } else {
             setDescription('')
             setAmount('')
@@ -122,7 +154,18 @@ export const ExpenseDialog = ({
             setSelectedTransaction(null)
             setPendingFiles([])
         }
-    }, [expense, isOpen, defaultPartnerKey])
+    }, [expense, isOpen, defaultPartnerKey, defaultTransaction])
+
+    const consumedByRef = useMemo(() => {
+        const map = {}
+        allExpenses.forEach((e) => {
+            if (e.transactionRef && (!expense || e.key !== expense.key)) {
+                map[e.transactionRef] =
+                    (map[e.transactionRef] || 0) + (e.amount || 0)
+            }
+        })
+        return map
+    }, [allExpenses, expense])
 
     const transactions = useMemo(() => {
         if (!bankAccount || paymentMethod === 'cash' || status === 'unpaid')
@@ -136,25 +179,30 @@ export const ExpenseDialog = ({
             stavke.forEach((t, i) => {
                 if (t.duguje > 0) {
                     const id = `${s.key}::${i}`
-                    const label = `${t.datumValute} | ${fmtNum(t.duguje)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`
+                    const consumed = consumedByRef[id] || 0
+                    const available = t.duguje - consumed
+                    if (available <= 0) return
+                    const label = `${t.datumValute} | ${fmtNum(available)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`
                     items.push({
                         id,
                         label,
                         statementKey: s.key,
                         index: i,
-                        amount: t.duguje,
+                        amount: available,
+                        originalAmount: t.duguje,
                         currency: s.valuta || 'RSD',
                         date: parseSerbianDate(t.datumValute),
                         description: t.nalogKorisnik || '',
                         opis: t.opis || '',
                         datumValute: t.datumValute,
+                        isPartial: consumed > 0,
                     })
                 }
             })
         })
         items.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         return items
-    }, [bankAccount, paymentMethod, statements, status])
+    }, [bankAccount, paymentMethod, statements, status, consumedByRef])
 
     const handleTransactionSelect = (_, value) => {
         setSelectedTransaction(value)
@@ -438,6 +486,9 @@ export const ExpenseDialog = ({
                                                 {opt.datumValute} &middot;{' '}
                                                 {fmtNum(opt.amount)}{' '}
                                                 {opt.currency}
+                                                {opt.isPartial
+                                                    ? ` (of ${fmtNum(opt.originalAmount)})`
+                                                    : ''}
                                                 {opt.opis
                                                     ? ` · ${opt.opis}`
                                                     : ''}

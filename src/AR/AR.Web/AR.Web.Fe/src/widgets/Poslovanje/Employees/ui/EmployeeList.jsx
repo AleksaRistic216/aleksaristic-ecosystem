@@ -20,6 +20,7 @@ import {
 import {
     Add,
     ArrowBack,
+    ContentCopy,
     Delete,
     Edit,
     Visibility,
@@ -45,6 +46,7 @@ export const EmployeeList = () => {
     const [transactions, setTransactions] = useState([])
     const [statements, setStatements] = useState([])
     const [partners, setPartners] = useState([])
+    const [transactionPartners, setTransactionPartners] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editEmployee, setEditEmployee] = useState(null)
     const [viewEmployee, setViewEmployee] = useState(null)
@@ -54,11 +56,13 @@ export const EmployeeList = () => {
         const unsub2 = poslovanjService.onEmployeeTransactions(setTransactions)
         const unsub3 = poslovanjService.onStatements(setStatements)
         const unsub4 = poslovanjService.onPartners(setPartners)
+        const unsub5 = poslovanjService.onTransactionPartners(setTransactionPartners)
         return () => {
             unsub1()
             unsub2()
             unsub3()
             unsub4()
+            unsub5()
         }
     }, [])
 
@@ -122,17 +126,36 @@ export const EmployeeList = () => {
         setDialogOpen(true)
     }
 
+    const handleClone = async (employee) => {
+        const { key, createdAt, updatedAt, ...data } = employee
+        try {
+            await poslovanjService.createEmployee({
+                ...data,
+                name: `${data.name} (copy)`,
+            })
+            toast('Employee cloned', { type: 'success' })
+        } catch (error) {
+            toast('Failed to clone', { type: 'error' })
+        }
+    }
+
     if (!isAdmin) return null
 
     if (viewEmployee) {
         return (
             <EmployeeDetail
                 employee={viewEmployee}
+                partner={partners.find(
+                    (p) => p.key === viewEmployee.partnerKey,
+                )}
                 transactions={transactions.filter(
                     (t) => t.employeeKey === viewEmployee.key,
                 )}
                 statements={statements}
                 accounts={accounts}
+                transactionPartners={transactionPartners.filter(
+                    (tp) => tp.partnerKey === viewEmployee.partnerKey,
+                )}
                 onBack={() => setViewEmployee(null)}
             />
         )
@@ -288,6 +311,12 @@ export const EmployeeList = () => {
                                         </IconButton>
                                         <IconButton
                                             size="small"
+                                            onClick={() => handleClone(e)}
+                                        >
+                                            <ContentCopy fontSize="small" />
+                                        </IconButton>
+                                        <IconButton
+                                            size="small"
                                             onClick={() => handleDelete(e)}
                                             sx={{ color: '#d32f2f' }}
                                         >
@@ -418,6 +447,15 @@ export const EmployeeList = () => {
                                                     title="Edit"
                                                 >
                                                     <Edit fontSize="small" />
+                                                </IconButton>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() =>
+                                                        handleClone(e)
+                                                    }
+                                                    title="Clone"
+                                                >
+                                                    <ContentCopy fontSize="small" />
                                                 </IconButton>
                                                 <IconButton
                                                     size="small"

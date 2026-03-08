@@ -637,6 +637,7 @@ export const InvoiceList = () => {
                     ? invoices.find((i) => i.key === linkInvoice.key) || linkInvoice
                     : null}
                 statements={statements}
+                allInvoices={invoices}
             />
         </Grid>
     )

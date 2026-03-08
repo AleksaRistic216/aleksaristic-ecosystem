@@ -27,9 +27,11 @@ import {
     ArrowBack,
     AttachFile,
     Close,
+    ContentCopy,
     Delete,
     Edit,
     SearchRounded,
+    SyncAlt,
 } from '@mui/icons-material'
 import { useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
@@ -65,21 +67,24 @@ const normalizeAccount = (acc) => {
     return acc.replace(/\D/g, '')
 }
 
-const getEmployeeAccounts = (employee) => {
-    if (employee.bankAccounts && Array.isArray(employee.bankAccounts)) {
-        return employee.bankAccounts
+const getPartnerAccounts = (partner) => {
+    if (!partner) return []
+    if (partner.bankAccounts && Array.isArray(partner.bankAccounts)) {
+        return partner.bankAccounts
     }
-    if (employee.bankAccount) {
-        return [{ account: employee.bankAccount, primary: true }]
+    if (partner.bankAccount) {
+        return [{ account: partner.bankAccount, primary: true }]
     }
     return []
 }
 
 export const EmployeeDetail = ({
     employee,
+    partner,
     transactions,
     statements,
     accounts,
+    transactionPartners = [],
     onBack,
 }) => {
     const theme = useTheme()
@@ -127,10 +132,24 @@ export const EmployeeDetail = ({
         setDialogOpen(true)
     }
 
+    const handleClone = async (tx) => {
+        const { key, createdAt, updatedAt, attachments, ...data } = tx
+        try {
+            await poslovanjService.createEmployeeTransaction({
+                ...data,
+                transactionRef: '',
+                transactionLabel: '',
+            })
+            toast('Transaction cloned', { type: 'success' })
+        } catch (error) {
+            toast('Failed to clone', { type: 'error' })
+        }
+    }
+
     const handleDiscover = () => {
-        const empAccounts = getEmployeeAccounts(employee)
+        const empAccounts = getPartnerAccounts(partner)
         if (empAccounts.length === 0) {
-            toast('Employee has no bank accounts set', { type: 'warning' })
+            toast('Partner has no bank accounts set', { type: 'warning' })
             return
         }
 
@@ -212,6 +231,269 @@ export const EmployeeDetail = ({
         }
     }
 
+    const [balanceOpen, setBalanceOpen] = useState(false)
+    const [balanceMatches, setBalanceMatches] = useState([])
+    const [balanceSelected, setBalanceSelected] = useState(new Set())
+    const [balancingTx, setBalancingTx] = useState(false)
+
+    const handleAutoBalance = () => {
+        const empAccounts = getPartnerAccounts(partner)
+        const normalizedEmpAccounts = empAccounts
+            .map((a) => normalizeAccount(a.account))
+            .filter(Boolean)
+
+        if (normalizedEmpAccounts.length === 0 && partnerMappedRefs.size === 0) {
+            toast('Partner has no bank accounts set', { type: 'warning' })
+            return
+        }
+
+        const unlinked = transactions.filter((t) => !t.transactionRef)
+        if (unlinked.length === 0) {
+            toast('No unlinked transactions to balance', { type: 'info' })
+            return
+        }
+
+        const consumedByRef = {}
+        transactions.forEach((t) => {
+            if (t.transactionRef) {
+                consumedByRef[t.transactionRef] =
+                    (consumedByRef[t.transactionRef] || 0) + (t.amount || 0)
+            }
+        })
+
+        const matchesEmp = (txAccount) =>
+            normalizedEmpAccounts.some(
+                (emp) => txAccount.includes(emp) || emp.includes(txAccount),
+            )
+
+        // Build available bank statement entries
+        const bankEntries = []
+        statements.forEach((s) => {
+            const stavke = normalizeStavke(s.stavke)
+            stavke.forEach((t, i) => {
+                const ref = `${s.key}::${i}`
+                const isMapped = partnerMappedRefs.has(ref)
+                if (!isMapped) {
+                    const txAccount = normalizeAccount(t.brojRacuna)
+                    if (!txAccount || !matchesEmp(txAccount)) return
+                }
+                const isDuguje = t.duguje > 0
+                const isPotrazuje = t.potrazuje > 0
+                if (!isDuguje && !isPotrazuje) return
+                const amount = isDuguje ? t.duguje : t.potrazuje
+                const consumed = consumedByRef[ref] || 0
+                const available = amount - consumed
+                if (available <= 0.01) return
+                bankEntries.push({
+                    ref,
+                    direction: isDuguje ? 'to' : 'from',
+                    amount,
+                    available,
+                    currency: s.valuta || 'RSD',
+                    date: parseSerbianDate(t.datumValute),
+                    datumValute: t.datumValute,
+                    description: t.nalogKorisnik || '',
+                    opis: t.opis || '',
+                    bankAccount: s.partija,
+                    label: `${t.datumValute} | ${fmtNum(amount)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`,
+                    partnerMappingKey: partnerMappedRefs.get(ref) || null,
+                })
+            })
+        })
+
+        if (bankEntries.length === 0) {
+            toast('No unlinked bank entries for this employee', {
+                type: 'info',
+            })
+            return
+        }
+
+        // Match unlinked transactions to bank entries by amount + direction
+        const usedRefs = new Set()
+        const matches = []
+
+        unlinked.forEach((tx) => {
+            const match = bankEntries.find(
+                (be) =>
+                    !usedRefs.has(be.ref) &&
+                    be.direction === tx.direction &&
+                    Math.abs(be.amount - (tx.amount || 0)) < 0.01,
+            )
+            if (match) {
+                usedRefs.add(match.ref)
+                matches.push({ transaction: tx, bankEntry: match })
+            }
+        })
+
+        if (matches.length === 0) {
+            toast('Could not match any transactions to bank entries', {
+                type: 'info',
+            })
+            return
+        }
+
+        setBalanceMatches(matches)
+        setBalanceSelected(new Set(matches.map((_, i) => i)))
+        setBalanceOpen(true)
+    }
+
+    const handleBalanceToggle = (index) => {
+        setBalanceSelected((prev) => {
+            const next = new Set(prev)
+            if (next.has(index)) next.delete(index)
+            else next.add(index)
+            return next
+        })
+    }
+
+    const handleBalanceConfirm = async () => {
+        const selected = balanceMatches.filter((_, i) =>
+            balanceSelected.has(i),
+        )
+        if (selected.length === 0) return
+
+        setBalancingTx(true)
+        try {
+            let count = 0
+            for (const match of selected) {
+                if (match.bankEntry.partnerMappingKey) {
+                    const newRemaining =
+                        (match.bankEntry.available || match.bankEntry.amount) -
+                        (match.transaction.amount || 0)
+                    if (newRemaining < 0.01) {
+                        await poslovanjService.unlinkTransactionFromPartner(
+                            match.bankEntry.partnerMappingKey,
+                        )
+                    }
+                }
+                await poslovanjService.updateEmployeeTransaction(
+                    match.transaction.key,
+                    {
+                        bankAccount: match.bankEntry.bankAccount,
+                        transactionRef: match.bankEntry.ref,
+                        transactionLabel: match.bankEntry.label,
+                    },
+                )
+                count++
+            }
+            toast(`Linked ${count} transaction(s)`, { type: 'success' })
+            setBalanceOpen(false)
+        } catch (error) {
+            toast('Failed to link some transactions', { type: 'error' })
+        } finally {
+            setBalancingTx(false)
+        }
+    }
+
+    const [itemLinkOpen, setItemLinkOpen] = useState(false)
+    const [itemLinkTxns, setItemLinkTxns] = useState([])
+    const [itemLinkTx, setItemLinkTx] = useState(null)
+
+    const partnerMappedRefs = useMemo(() => {
+        const map = new Map()
+        transactionPartners.forEach((tp) => {
+            if (tp.transactionRef) map.set(tp.transactionRef, tp.key)
+        })
+        return map
+    }, [transactionPartners])
+
+    const handleAutoLinkItem = (tx) => {
+        const empAccounts = getPartnerAccounts(partner)
+        const normalizedEmpAccounts = empAccounts
+            .map((a) => normalizeAccount(a.account))
+            .filter(Boolean)
+
+        if (normalizedEmpAccounts.length === 0 && partnerMappedRefs.size === 0) {
+            toast('Partner has no bank accounts', { type: 'warning' })
+            return
+        }
+
+        const consumedByRef = {}
+        transactions.forEach((t) => {
+            if (t.transactionRef) {
+                consumedByRef[t.transactionRef] =
+                    (consumedByRef[t.transactionRef] || 0) + (t.amount || 0)
+            }
+        })
+
+        const matchesEmp = (txAccount) =>
+            normalizedEmpAccounts.some(
+                (emp) => txAccount.includes(emp) || emp.includes(txAccount),
+            )
+
+        const candidates = []
+        statements.forEach((s) => {
+            const stavke = normalizeStavke(s.stavke)
+            stavke.forEach((t, i) => {
+                const ref = `${s.key}::${i}`
+                const isMapped = partnerMappedRefs.has(ref)
+                if (!isMapped) {
+                    const txAccount = normalizeAccount(t.brojRacuna)
+                    if (!txAccount || !matchesEmp(txAccount)) return
+                }
+                const isDuguje = t.duguje > 0
+                const isPotrazuje = t.potrazuje > 0
+                if (!isDuguje && !isPotrazuje) return
+                const direction = isDuguje ? 'to' : 'from'
+                if (direction !== tx.direction) return
+                const amount = isDuguje ? t.duguje : t.potrazuje
+                const consumed = consumedByRef[ref] || 0
+                const available = amount - consumed
+                if (available <= 0.01) return
+                candidates.push({
+                    ref,
+                    direction,
+                    amount,
+                    available,
+                    currency: s.valuta || 'RSD',
+                    date: t.datumValute,
+                    bankAccount: s.partija,
+                    description: t.nalogKorisnik || '',
+                    opis: t.opis || '',
+                    label: `${t.datumValute} | ${fmtNum(amount)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`,
+                    partnerMappingKey: partnerMappedRefs.get(ref) || null,
+                })
+            })
+        })
+
+        if (candidates.length === 0) {
+            toast('No matching bank transaction found', { type: 'info' })
+            return
+        }
+
+        if (candidates.length === 1) {
+            handleItemLinkConfirm(tx, candidates[0])
+            return
+        }
+
+        setItemLinkTx(tx)
+        setItemLinkTxns(candidates)
+        setItemLinkOpen(true)
+    }
+
+    const handleItemLinkConfirm = async (tx, bankEntry) => {
+        try {
+            if (bankEntry.partnerMappingKey) {
+                const newRemaining =
+                    (bankEntry.available || bankEntry.amount) - (tx.amount || 0)
+                if (newRemaining < 0.01) {
+                    await poslovanjService.unlinkTransactionFromPartner(
+                        bankEntry.partnerMappingKey,
+                    )
+                }
+            }
+            await poslovanjService.updateEmployeeTransaction(tx.key, {
+                bankAccount: bankEntry.bankAccount,
+                transactionRef: bankEntry.ref,
+                transactionLabel: bankEntry.label,
+            })
+            toast('Transaction linked', { type: 'success' })
+            setItemLinkOpen(false)
+        } catch {
+            toast('Failed to link transaction', { type: 'error' })
+        }
+    }
+
     const handleDiscoverCreate = async () => {
         const selected = discovered.filter((d) => discoverSelected.has(d.ref))
         if (selected.length === 0) return
@@ -286,16 +568,26 @@ export const EmployeeDetail = ({
                         </Box>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                        {getEmployeeAccounts(employee).length > 0 && (
-                            <Button
-                                variant="outlined"
-                                startIcon={<SearchRounded />}
-                                onClick={handleDiscover}
-                                size={isMobile ? 'small' : 'medium'}
-                                sx={{ textTransform: 'none' }}
-                            >
-                                {isMobile ? 'Discover' : 'Auto Discover'}
-                            </Button>
+                        {getPartnerAccounts(partner).length > 0 && (
+                            <>
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<SearchRounded />}
+                                    onClick={handleDiscover}
+                                    size={isMobile ? 'small' : 'medium'}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {isMobile ? 'Discover' : 'Auto Discover'}
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleAutoBalance}
+                                    size={isMobile ? 'small' : 'medium'}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {isMobile ? 'Balance' : 'Auto Balance'}
+                                </Button>
+                            </>
                         )}
                         <Button
                             variant="contained"
@@ -317,26 +609,33 @@ export const EmployeeDetail = ({
                         flexWrap: 'wrap',
                     }}
                 >
-                    {getEmployeeAccounts(employee).map((acc, i) => (
+                    {partner && (
+                        <Chip
+                            label={partner.name}
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                        />
+                    )}
+                    {getPartnerAccounts(partner).map((acc, i) => (
                         <Chip
                             key={i}
                             label={acc.account}
                             size="small"
                             variant="outlined"
-                            color={acc.primary ? 'primary' : 'default'}
                             sx={{ fontFamily: 'monospace' }}
                         />
                     ))}
-                    {employee.email && (
+                    {partner?.email && (
                         <Chip
-                            label={employee.email}
+                            label={partner.email}
                             size="small"
                             variant="outlined"
                         />
                     )}
-                    {employee.phone && (
+                    {partner?.phone && (
                         <Chip
-                            label={employee.phone}
+                            label={partner.phone}
                             size="small"
                             variant="outlined"
                         />
@@ -491,6 +790,17 @@ export const EmployeeDetail = ({
                                                         : '#2e7d32',
                                             }}
                                         />
+                                        {!tx.transactionRef && (
+                                            <Chip
+                                                label="Unlinked"
+                                                size="small"
+                                                variant="outlined"
+                                                sx={{
+                                                    borderColor: '#ed6c02',
+                                                    color: '#ed6c02',
+                                                }}
+                                            />
+                                        )}
                                         {normalizeAttachments(tx.attachments)
                                             .length > 0 && (
                                             <AttachFile
@@ -502,11 +812,28 @@ export const EmployeeDetail = ({
                                         )}
                                     </Box>
                                     <Box>
+                                        {!tx.transactionRef && (
+                                            <IconButton
+                                                size="small"
+                                                onClick={() =>
+                                                    handleAutoLinkItem(tx)
+                                                }
+                                                title="Auto link"
+                                            >
+                                                <SyncAlt fontSize="small" />
+                                            </IconButton>
+                                        )}
                                         <IconButton
                                             size="small"
                                             onClick={() => handleEdit(tx)}
                                         >
                                             <Edit fontSize="small" />
+                                        </IconButton>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleClone(tx)}
+                                        >
+                                            <ContentCopy fontSize="small" />
                                         </IconButton>
                                         <IconButton
                                             size="small"
@@ -564,25 +891,47 @@ export const EmployeeDetail = ({
                                             {tx.description || '—'}
                                         </TableCell>
                                         <TableCell>
-                                            <Chip
-                                                label={
-                                                    tx.direction === 'to'
-                                                        ? 'Payment'
-                                                        : 'Repayment'
-                                                }
-                                                size="small"
-                                                variant="outlined"
+                                            <Box
                                                 sx={{
-                                                    borderColor:
-                                                        tx.direction === 'to'
-                                                            ? '#d32f2f'
-                                                            : '#2e7d32',
-                                                    color:
-                                                        tx.direction === 'to'
-                                                            ? '#d32f2f'
-                                                            : '#2e7d32',
+                                                    display: 'flex',
+                                                    gap: 0.5,
+                                                    alignItems: 'center',
                                                 }}
-                                            />
+                                            >
+                                                <Chip
+                                                    label={
+                                                        tx.direction === 'to'
+                                                            ? 'Payment'
+                                                            : 'Repayment'
+                                                    }
+                                                    size="small"
+                                                    variant="outlined"
+                                                    sx={{
+                                                        borderColor:
+                                                            tx.direction ===
+                                                            'to'
+                                                                ? '#d32f2f'
+                                                                : '#2e7d32',
+                                                        color:
+                                                            tx.direction ===
+                                                            'to'
+                                                                ? '#d32f2f'
+                                                                : '#2e7d32',
+                                                    }}
+                                                />
+                                                {!tx.transactionRef && (
+                                                    <Chip
+                                                        label="Unlinked"
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{
+                                                            borderColor:
+                                                                '#ed6c02',
+                                                            color: '#ed6c02',
+                                                        }}
+                                                    />
+                                                )}
+                                            </Box>
                                         </TableCell>
                                         <TableCell
                                             align="right"
@@ -623,12 +972,30 @@ export const EmployeeDetail = ({
                                                     <AttachFile fontSize="small" />
                                                 </IconButton>
                                             )}
+                                            {!tx.transactionRef && (
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() =>
+                                                        handleAutoLinkItem(tx)
+                                                    }
+                                                    title="Auto link"
+                                                >
+                                                    <SyncAlt fontSize="small" />
+                                                </IconButton>
+                                            )}
                                             <IconButton
                                                 size="small"
                                                 onClick={() => handleEdit(tx)}
                                                 title="Edit"
                                             >
                                                 <Edit fontSize="small" />
+                                            </IconButton>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleClone(tx)}
+                                                title="Clone"
+                                            >
+                                                <ContentCopy fontSize="small" />
                                             </IconButton>
                                             <IconButton
                                                 size="small"
@@ -814,6 +1181,304 @@ export const EmployeeDetail = ({
                             : `Create ${discoverSelected.size} Transaction(s)`}
                     </Button>
                 </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={balanceOpen}
+                onClose={() => setBalanceOpen(false)}
+                fullWidth
+                fullScreen={isMobile}
+                maxWidth="md"
+                PaperProps={{ sx: isMobile ? {} : { borderRadius: 3 } }}
+            >
+                <DialogTitle
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}
+                >
+                    <Box>
+                        <Typography variant="h6" fontWeight={600}>
+                            Auto Balance Preview
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {balanceSelected.size} of {balanceMatches.length}{' '}
+                            match(es) selected
+                        </Typography>
+                    </Box>
+                    <IconButton
+                        onClick={() => setBalanceOpen(false)}
+                        size="small"
+                    >
+                        <Close />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent sx={{ px: isMobile ? 1 : 3 }}>
+                    {balancingTx && <LinearProgress sx={{ mb: 1 }} />}
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow sx={{ bgcolor: 'grey.50' }}>
+                                <TableCell padding="checkbox">
+                                    <Checkbox
+                                        checked={
+                                            balanceMatches.length > 0 &&
+                                            balanceSelected.size ===
+                                                balanceMatches.length
+                                        }
+                                        indeterminate={
+                                            balanceSelected.size > 0 &&
+                                            balanceSelected.size <
+                                                balanceMatches.length
+                                        }
+                                        onChange={() => {
+                                            if (
+                                                balanceSelected.size ===
+                                                balanceMatches.length
+                                            ) {
+                                                setBalanceSelected(new Set())
+                                            } else {
+                                                setBalanceSelected(
+                                                    new Set(
+                                                        balanceMatches.map(
+                                                            (_, i) => i,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                        }}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <strong>Transaction</strong>
+                                </TableCell>
+                                <TableCell>
+                                    <strong>Direction</strong>
+                                </TableCell>
+                                <TableCell align="right">
+                                    <strong>Amount</strong>
+                                </TableCell>
+                                <TableCell>
+                                    <strong>Bank Entry</strong>
+                                </TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {balanceMatches.map((m, i) => (
+                                <TableRow
+                                    key={i}
+                                    hover
+                                    onClick={() => handleBalanceToggle(i)}
+                                    sx={{
+                                        cursor: 'pointer',
+                                        opacity: balanceSelected.has(i)
+                                            ? 1
+                                            : 0.5,
+                                    }}
+                                >
+                                    <TableCell padding="checkbox">
+                                        <Checkbox
+                                            checked={balanceSelected.has(i)}
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2" noWrap>
+                                            {m.transaction.description || '—'}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                        >
+                                            {m.transaction.date}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={
+                                                m.transaction.direction === 'to'
+                                                    ? 'Payment'
+                                                    : 'Repayment'
+                                            }
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{
+                                                borderColor:
+                                                    m.transaction.direction ===
+                                                    'to'
+                                                        ? '#d32f2f'
+                                                        : '#2e7d32',
+                                                color:
+                                                    m.transaction.direction ===
+                                                    'to'
+                                                        ? '#d32f2f'
+                                                        : '#2e7d32',
+                                            }}
+                                        />
+                                    </TableCell>
+                                    <TableCell
+                                        align="right"
+                                        sx={{
+                                            fontWeight: 600,
+                                            color:
+                                                m.transaction.direction === 'to'
+                                                    ? '#d32f2f'
+                                                    : '#2e7d32',
+                                        }}
+                                    >
+                                        {fmtNum(m.transaction.amount)}{' '}
+                                        {m.transaction.currency || 'RSD'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography
+                                            variant="caption"
+                                            noWrap
+                                            sx={{
+                                                maxWidth: isMobile ? 100 : 250,
+                                                display: 'block',
+                                            }}
+                                        >
+                                            {m.bankEntry.datumValute} &middot;{' '}
+                                            {m.bankEntry.description}
+                                            {m.bankEntry.opis
+                                                ? ` - ${m.bankEntry.opis}`
+                                                : ''}
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button
+                        onClick={() => setBalanceOpen(false)}
+                        sx={{ textTransform: 'none' }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleBalanceConfirm}
+                        disabled={balancingTx || balanceSelected.size === 0}
+                        sx={{ textTransform: 'none' }}
+                    >
+                        {balancingTx
+                            ? 'Linking...'
+                            : `Link ${balanceSelected.size} Transaction(s)`}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={itemLinkOpen}
+                onClose={() => setItemLinkOpen(false)}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{ sx: { borderRadius: 3 } }}
+            >
+                <DialogTitle
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}
+                >
+                    <Box>
+                        <Typography variant="h6" fontWeight={600}>
+                            Select Transaction
+                        </Typography>
+                        {itemLinkTx && (
+                            <Typography variant="body2" color="text.secondary">
+                                {itemLinkTx.description || '—'} &mdash;{' '}
+                                {fmtNum(itemLinkTx.amount)}{' '}
+                                {itemLinkTx.currency || 'RSD'}
+                            </Typography>
+                        )}
+                    </Box>
+                    <IconButton
+                        onClick={() => setItemLinkOpen(false)}
+                        size="small"
+                    >
+                        <Close />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent>
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow sx={{ bgcolor: 'grey.50' }}>
+                                <TableCell>
+                                    <strong>Date</strong>
+                                </TableCell>
+                                <TableCell>
+                                    <strong>Description</strong>
+                                </TableCell>
+                                <TableCell align="right">
+                                    <strong>Amount</strong>
+                                </TableCell>
+                                <TableCell align="center">
+                                    <strong>Action</strong>
+                                </TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {itemLinkTxns.map((tx) => (
+                                <TableRow key={tx.ref} hover>
+                                    <TableCell>{tx.date}</TableCell>
+                                    <TableCell>
+                                        <Typography variant="body2">
+                                            {tx.description}
+                                        </Typography>
+                                        {tx.opis && (
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                            >
+                                                {tx.opis}
+                                            </Typography>
+                                        )}
+                                    </TableCell>
+                                    <TableCell
+                                        align="right"
+                                        sx={{ fontWeight: 600 }}
+                                    >
+                                        {itemLinkTx &&
+                                        Math.abs(tx.amount - (itemLinkTx.amount || 0)) > 0.01 ? (
+                                            <>
+                                                {fmtNum(itemLinkTx.amount)}{' '}
+                                                <Typography
+                                                    component="span"
+                                                    variant="body2"
+                                                    color="text.secondary"
+                                                    sx={{ fontWeight: 400 }}
+                                                >
+                                                    of {fmtNum(tx.amount)}
+                                                </Typography>
+                                            </>
+                                        ) : (
+                                            fmtNum(tx.amount)
+                                        )}{' '}
+                                        {tx.currency}
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        <Button
+                                            size="small"
+                                            variant="outlined"
+                                            onClick={() =>
+                                                handleItemLinkConfirm(
+                                                    itemLinkTx,
+                                                    tx,
+                                                )
+                                            }
+                                            sx={{ textTransform: 'none' }}
+                                        >
+                                            Link
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </DialogContent>
             </Dialog>
         </Grid>
     )

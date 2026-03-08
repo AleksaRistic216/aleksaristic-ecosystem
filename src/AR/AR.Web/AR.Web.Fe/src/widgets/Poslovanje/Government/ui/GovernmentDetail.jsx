@@ -1,16 +1,11 @@
-import { useAuth } from '@/app/context/AuthContext'
 import { poslovanjService } from '@/app/services/poslovanjService'
 import {
     Box,
     Button,
     Chip,
-    FormControl,
     Grid,
     IconButton,
-    InputLabel,
-    MenuItem,
     Paper,
-    Select,
     Table,
     TableBody,
     TableCell,
@@ -29,10 +24,9 @@ import {
     Delete,
     Edit,
 } from '@mui/icons-material'
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/router'
+import { useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
-import { ExpenseDialog } from './ExpenseDialog'
+import { GovernmentExpenseDialog } from './GovernmentExpenseDialog'
 
 const fmtNum = (n) =>
     (n || 0).toLocaleString('sr-RS', {
@@ -40,103 +34,45 @@ const fmtNum = (n) =>
         maximumFractionDigits: 2,
     })
 
-const PAYMENT_LABELS = {
-    bank_account: 'Bank Account',
-    card: 'Card',
-    cash: 'Cash',
-}
-
 const normalizeAttachments = (attachments) => {
     if (!attachments) return []
     if (Array.isArray(attachments)) return attachments
     return Object.values(attachments)
 }
 
-export const ExpenseList = () => {
-    const { isAdmin } = useAuth()
-    const router = useRouter()
+export const GovernmentDetail = ({
+    partner,
+    expenses,
+    statements,
+    accounts,
+    allPartners,
+    onBack,
+}) => {
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-    const [expenses, setExpenses] = useState([])
-    const [statements, setStatements] = useState([])
-    const [partners, setPartners] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editExpense, setEditExpense] = useState(null)
-    const [filterMethod, setFilterMethod] = useState('')
-    const [filterAccount, setFilterAccount] = useState('')
-    const [filterStatus, setFilterStatus] = useState('')
 
-    useEffect(() => {
-        const unsub1 = poslovanjService.onExpenses(setExpenses)
-        const unsub2 = poslovanjService.onStatements(setStatements)
-        const unsub3 = poslovanjService.onPartners(setPartners)
-        return () => {
-            unsub1()
-            unsub2()
-            unsub3()
-        }
-    }, [])
-
-    const partnerMap = useMemo(() => {
-        const map = {}
-        partners.forEach((p) => {
-            map[p.key] = p.name
-        })
-        return map
-    }, [partners])
-
-    const accounts = useMemo(() => {
-        const map = {}
-        statements.forEach((s) => {
-            if (!map[s.partija]) {
-                map[s.partija] = {
-                    partija: s.partija,
-                    valuta: s.valuta || 'RSD',
-                }
-            }
-        })
-        return Object.values(map).sort((a, b) =>
-            a.partija.localeCompare(b.partija),
+    const sorted = useMemo(() => {
+        return [...expenses].sort((a, b) =>
+            (b.date || '').localeCompare(a.date || ''),
         )
-    }, [statements])
-
-    const filtered = useMemo(() => {
-        let list = [...expenses]
-        if (filterMethod) {
-            list = list.filter((e) => e.paymentMethod === filterMethod)
-        }
-        if (filterAccount) {
-            list = list.filter((e) => e.bankAccount === filterAccount)
-        }
-        if (filterStatus) {
-            list = list.filter((e) =>
-                filterStatus === 'unpaid'
-                    ? e.status === 'unpaid'
-                    : e.status !== 'unpaid',
-            )
-        }
-        list.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-        return list
-    }, [expenses, filterMethod, filterAccount, filterStatus])
+    }, [expenses])
 
     const totals = useMemo(() => {
-        const byCurrency = {}
-        filtered.forEach((e) => {
-            const c = e.currency || 'RSD'
-            byCurrency[c] = (byCurrency[c] || 0) + (e.amount || 0)
+        let paid = 0
+        let unpaid = 0
+        expenses.forEach((e) => {
+            if (e.status === 'unpaid') unpaid += e.amount || 0
+            else paid += e.amount || 0
         })
-        return byCurrency
-    }, [filtered])
+        return { paid, unpaid, total: paid + unpaid }
+    }, [expenses])
 
     const handleDelete = async (expense) => {
-        if (
-            !confirm(
-                `Delete expense "${expense.description || 'Untitled'}"?`,
-            )
-        )
-            return
+        if (!confirm(`Delete "${expense.description || 'Untitled'}"?`)) return
         try {
-            await poslovanjService.deleteExpense(expense.key)
+            await poslovanjService.deleteGovernmentExpense(expense.key)
             toast('Expense deleted', { type: 'success' })
         } catch (error) {
             toast('Failed to delete', { type: 'error' })
@@ -156,10 +92,9 @@ export const ExpenseList = () => {
     const handleClone = async (expense) => {
         const { key, createdAt, updatedAt, attachments, ...data } = expense
         try {
-            await poslovanjService.createExpense({
+            await poslovanjService.createGovernmentExpense({
                 ...data,
                 status: 'unpaid',
-                paymentMethod: '',
                 bankAccount: '',
                 transactionRef: '',
                 transactionLabel: '',
@@ -169,8 +104,6 @@ export const ExpenseList = () => {
             toast('Failed to clone', { type: 'error' })
         }
     }
-
-    if (!isAdmin) return null
 
     return (
         <Grid
@@ -195,18 +128,25 @@ export const ExpenseList = () => {
                             gap: 1,
                         }}
                     >
-                        <IconButton
-                            onClick={() => router.push('/poslovanje')}
-                            size="small"
-                        >
+                        <IconButton onClick={onBack} size="small">
                             <ArrowBack />
                         </IconButton>
-                        <Typography
-                            variant={isMobile ? 'h6' : 'h5'}
-                            fontWeight={600}
-                        >
-                            Expenses
-                        </Typography>
+                        <Box>
+                            <Typography
+                                variant={isMobile ? 'h6' : 'h5'}
+                                fontWeight={600}
+                            >
+                                {partner.name}
+                            </Typography>
+                            {partner.taxId && (
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
+                                    {partner.taxId}
+                                </Typography>
+                            )}
+                        </Box>
                     </Box>
                     <Button
                         variant="contained"
@@ -222,100 +162,62 @@ export const ExpenseList = () => {
                 <Box
                     sx={{
                         display: 'flex',
-                        gap: isMobile ? 1 : 2,
-                        mb: 2,
+                        gap: 2,
+                        mb: 3,
                         flexWrap: 'wrap',
-                        alignItems: 'center',
                     }}
                 >
-                    <FormControl
-                        size="small"
-                        sx={{
-                            minWidth: isMobile ? 100 : 120,
-                            flex: isMobile ? '1 1 30%' : undefined,
-                        }}
+                    <Paper
+                        variant="outlined"
+                        sx={{ p: 2, flex: '1 1 140px' }}
                     >
-                        <InputLabel>Status</InputLabel>
-                        <Select
-                            value={filterStatus}
-                            label="Status"
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                        >
-                            <MenuItem value="">All</MenuItem>
-                            <MenuItem value="paid">Paid</MenuItem>
-                            <MenuItem value="unpaid">Unpaid</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl
-                        size="small"
-                        sx={{
-                            minWidth: isMobile ? 100 : 140,
-                            flex: isMobile ? '1 1 30%' : undefined,
-                        }}
+                        <Typography variant="caption" color="text.secondary">
+                            Total
+                        </Typography>
+                        <Typography variant="h6" fontWeight={600}>
+                            {fmtNum(totals.total)} RSD
+                        </Typography>
+                    </Paper>
+                    <Paper
+                        variant="outlined"
+                        sx={{ p: 2, flex: '1 1 140px' }}
                     >
-                        <InputLabel>Payment</InputLabel>
-                        <Select
-                            value={filterMethod}
-                            label="Payment"
-                            onChange={(e) => setFilterMethod(e.target.value)}
+                        <Typography variant="caption" color="text.secondary">
+                            Paid
+                        </Typography>
+                        <Typography
+                            variant="h6"
+                            fontWeight={600}
+                            sx={{ color: '#2e7d32' }}
                         >
-                            <MenuItem value="">All</MenuItem>
-                            <MenuItem value="bank_account">
-                                Bank Account
-                            </MenuItem>
-                            <MenuItem value="card">Card</MenuItem>
-                            <MenuItem value="cash">Cash</MenuItem>
-                        </Select>
-                    </FormControl>
-                    <FormControl
-                        size="small"
-                        sx={{
-                            minWidth: isMobile ? 100 : 200,
-                            flex: isMobile ? '1 1 30%' : undefined,
-                        }}
-                    >
-                        <InputLabel>Account</InputLabel>
-                        <Select
-                            value={filterAccount}
-                            label="Account"
-                            onChange={(e) => setFilterAccount(e.target.value)}
+                            {fmtNum(totals.paid)}
+                        </Typography>
+                    </Paper>
+                    {totals.unpaid > 0 && (
+                        <Paper
+                            variant="outlined"
+                            sx={{ p: 2, flex: '1 1 140px' }}
                         >
-                            <MenuItem value="">All</MenuItem>
-                            {accounts.map((acc) => (
-                                <MenuItem
-                                    key={acc.partija}
-                                    value={acc.partija}
-                                >
-                                    {acc.partija} ({acc.valuta})
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    {Object.keys(totals).length > 0 && (
-                        <Box
-                            sx={{
-                                display: 'flex',
-                                gap: 1,
-                                flexWrap: 'wrap',
-                                ml: isMobile ? 0 : 'auto',
-                                width: isMobile ? '100%' : undefined,
-                            }}
-                        >
-                            {Object.entries(totals).map(([cur, total]) => (
-                                <Chip
-                                    key={cur}
-                                    label={`${fmtNum(total)} ${cur}`}
-                                    size="small"
-                                    sx={{ fontWeight: 600 }}
-                                />
-                            ))}
-                        </Box>
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                            >
+                                Unpaid
+                            </Typography>
+                            <Typography
+                                variant="h6"
+                                fontWeight={600}
+                                sx={{ color: '#ed6c02' }}
+                            >
+                                {fmtNum(totals.unpaid)}
+                            </Typography>
+                        </Paper>
                     )}
                 </Box>
 
                 {isMobile ? (
                     <>
-                        {filtered.length === 0 && (
+                        {sorted.length === 0 && (
                             <Paper
                                 variant="outlined"
                                 sx={{
@@ -327,7 +229,7 @@ export const ExpenseList = () => {
                                 No expenses yet
                             </Paper>
                         )}
-                        {filtered.map((e) => (
+                        {sorted.map((e) => (
                             <Paper
                                 key={e.key}
                                 variant="outlined"
@@ -354,10 +256,6 @@ export const ExpenseList = () => {
                                             color="text.secondary"
                                         >
                                             {e.date}
-                                            {e.partnerKey &&
-                                            partnerMap[e.partnerKey]
-                                                ? ` · ${partnerMap[e.partnerKey]}`
-                                                : ''}
                                         </Typography>
                                     </Box>
                                     <Typography
@@ -381,7 +279,6 @@ export const ExpenseList = () => {
                                         sx={{
                                             display: 'flex',
                                             gap: 0.5,
-                                            flexWrap: 'wrap',
                                             alignItems: 'center',
                                         }}
                                     >
@@ -389,11 +286,7 @@ export const ExpenseList = () => {
                                             label={
                                                 e.status === 'unpaid'
                                                     ? 'Unpaid'
-                                                    : PAYMENT_LABELS[
-                                                          e.paymentMethod
-                                                      ] ||
-                                                      e.paymentMethod ||
-                                                      'Paid'
+                                                    : 'Paid'
                                             }
                                             size="small"
                                             variant="outlined"
@@ -401,11 +294,11 @@ export const ExpenseList = () => {
                                                 borderColor:
                                                     e.status === 'unpaid'
                                                         ? '#ed6c02'
-                                                        : undefined,
+                                                        : '#2e7d32',
                                                 color:
                                                     e.status === 'unpaid'
                                                         ? '#ed6c02'
-                                                        : undefined,
+                                                        : '#2e7d32',
                                             }}
                                         />
                                         {normalizeAttachments(e.attachments)
@@ -421,15 +314,15 @@ export const ExpenseList = () => {
                                     <Box>
                                         <IconButton
                                             size="small"
-                                            onClick={() => handleClone(e)}
-                                        >
-                                            <ContentCopy fontSize="small" />
-                                        </IconButton>
-                                        <IconButton
-                                            size="small"
                                             onClick={() => handleEdit(e)}
                                         >
                                             <Edit fontSize="small" />
+                                        </IconButton>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleClone(e)}
+                                        >
+                                            <ContentCopy fontSize="small" />
                                         </IconButton>
                                         <IconButton
                                             size="small"
@@ -454,9 +347,6 @@ export const ExpenseList = () => {
                                     <TableCell>
                                         <strong>Description</strong>
                                     </TableCell>
-                                    <TableCell>
-                                        <strong>Partner</strong>
-                                    </TableCell>
                                     <TableCell align="right">
                                         <strong>Amount</strong>
                                     </TableCell>
@@ -469,10 +359,10 @@ export const ExpenseList = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {filtered.length === 0 && (
+                                {sorted.length === 0 && (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={6}
+                                            colSpan={5}
                                             align="center"
                                             sx={{
                                                 py: 4,
@@ -483,14 +373,11 @@ export const ExpenseList = () => {
                                         </TableCell>
                                     </TableRow>
                                 )}
-                                {filtered.map((e) => (
+                                {sorted.map((e) => (
                                     <TableRow key={e.key} hover>
                                         <TableCell>{e.date}</TableCell>
                                         <TableCell>
                                             {e.description || '—'}
-                                        </TableCell>
-                                        <TableCell>
-                                            {partnerMap[e.partnerKey] || '—'}
                                         </TableCell>
                                         <TableCell
                                             align="right"
@@ -547,17 +434,17 @@ export const ExpenseList = () => {
                                             )}
                                             <IconButton
                                                 size="small"
-                                                onClick={() => handleClone(e)}
-                                                title="Clone"
-                                            >
-                                                <ContentCopy fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                                size="small"
                                                 onClick={() => handleEdit(e)}
                                                 title="Edit"
                                             >
                                                 <Edit fontSize="small" />
+                                            </IconButton>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleClone(e)}
+                                                title="Clone"
+                                            >
+                                                <ContentCopy fontSize="small" />
                                             </IconButton>
                                             <IconButton
                                                 size="small"
@@ -576,14 +463,14 @@ export const ExpenseList = () => {
                 )}
             </Grid>
 
-            <ExpenseDialog
+            <GovernmentExpenseDialog
                 isOpen={dialogOpen}
                 onClose={() => setDialogOpen(false)}
                 expense={editExpense}
+                partners={allPartners.filter((p) => p.isGovernment)}
                 accounts={accounts}
                 statements={statements}
-                partners={partners}
-                allExpenses={expenses}
+                defaultPartnerKey={partner.key}
             />
         </Grid>
     )

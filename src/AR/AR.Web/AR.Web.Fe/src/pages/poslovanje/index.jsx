@@ -2,7 +2,7 @@ import { Layout } from '@/widgets/Layout'
 import { useAuth } from '@/app/context/AuthContext'
 import { AuthButton } from '@/widgets/Auth'
 import { Card, CardContent, Grid, Typography } from '@mui/material'
-import { Receipt, Settings, Mail, AccountBalance, ShoppingCart, People, Handshake } from '@mui/icons-material'
+import { CurrencyExchange, Receipt, Settings, Mail, AccountBalance, ShoppingCart, People, Handshake, AccountBalanceWallet } from '@mui/icons-material'
 import { useRouter } from 'next/router'
 
 const Poslovanje = () => {
@@ -178,6 +178,64 @@ const Poslovanje = () => {
                                         color="text.secondary"
                                     >
                                         Track employees and transactions
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Card
+                                variant="outlined"
+                                sx={{
+                                    cursor: 'pointer',
+                                    '&:hover': { boxShadow: 2 },
+                                }}
+                                onClick={() =>
+                                    router.push('/poslovanje/government')
+                                }
+                            >
+                                <CardContent
+                                    sx={{ textAlign: 'center', py: 4 }}
+                                >
+                                    <AccountBalanceWallet
+                                        sx={{ fontSize: 48, mb: 1 }}
+                                    />
+                                    <Typography variant="h6">
+                                        Government
+                                    </Typography>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                    >
+                                        Taxes, fees &amp; government dues
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Card
+                                variant="outlined"
+                                sx={{
+                                    cursor: 'pointer',
+                                    '&:hover': { boxShadow: 2 },
+                                }}
+                                onClick={() =>
+                                    router.push('/poslovanje/forex')
+                                }
+                            >
+                                <CardContent
+                                    sx={{ textAlign: 'center', py: 4 }}
+                                >
+                                    <CurrencyExchange
+                                        sx={{ fontSize: 48, mb: 1 }}
+                                    />
+                                    <Typography variant="h6">
+                                        Forex
+                                    </Typography>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                    >
+                                        Currency exchange records
                                     </Typography>
                                 </CardContent>
                             </Card>

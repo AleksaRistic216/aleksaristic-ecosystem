@@ -1,4 +1,5 @@
 import {
+    Autocomplete,
     Box,
     Chip,
     Dialog,
@@ -6,15 +7,23 @@ import {
     DialogTitle,
     Grid,
     IconButton,
+    ListItemIcon,
+    ListItemText,
+    Menu,
+    MenuItem,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
     TableRow,
+    TextField,
     Typography,
 } from '@mui/material'
-import { Close } from '@mui/icons-material'
+import { AccountBalance, Close, LinkOff, MoreVert, PersonAdd, Receipt } from '@mui/icons-material'
+import { useState } from 'react'
+import { poslovanjService } from '@/app/services/poslovanjService'
+import { toast } from 'react-toastify'
 
 const fmtNum = (n) =>
     (n || 0).toLocaleString('sr-RS', {
@@ -39,16 +48,66 @@ const normalizeStavke = (stavke) => {
     return Object.values(stavke)
 }
 
-export const StatementPreview = ({ isOpen, onClose, statement, linkedByExpenses, linkedByInvoices }) => {
+export const StatementPreview = ({
+    isOpen,
+    onClose,
+    statement,
+    linkedByExpenses,
+    linkedByInvoices,
+    linkedByPartners,
+    partners = [],
+    onCreateExpense,
+    onCreateGovernmentExpense,
+}) => {
+    const [linking, setLinking] = useState(null)
+    const [menuAnchor, setMenuAnchor] = useState(null)
+    const [menuIndex, setMenuIndex] = useState(null)
+
     if (!statement) return null
 
     const stavke = normalizeStavke(statement.stavke)
 
     const isLinked = (s, i) => {
         const id = `${statement.key}::${i}`
+        if (linkedByPartners?.has(id)) return true
         if (s.duguje > 0) return linkedByExpenses?.has(id)
-        if (s.potrazuje > 0) return linkedByInvoices?.has(id)
+        if (s.potrazuje > 0) return linkedByInvoices?.has(id) || linkedByExpenses?.has(id)
         return true
+    }
+
+    const getPartnerLink = (i) => {
+        const id = `${statement.key}::${i}`
+        return linkedByPartners?.get(id) || null
+    }
+
+    const getExpenseLink = (i) => {
+        const id = `${statement.key}::${i}`
+        return linkedByExpenses?.get(id) || null
+    }
+
+    const handleLinkPartner = async (i, partner) => {
+        if (!partner) return
+        const txRef = `${statement.key}::${i}`
+        try {
+            await poslovanjService.linkTransactionToPartner(
+                txRef,
+                partner.key,
+                partner.name,
+            )
+            setLinking(null)
+            toast('Linked to partner', { type: 'success' })
+        } catch {
+            toast('Failed to link', { type: 'error' })
+        }
+    }
+
+    const handleUnlinkPartner = async (tp) => {
+        try {
+            await poslovanjService.unlinkTransactionFromPartner(tp.key)
+            toast('Unlinked from partner', { type: 'success' })
+        } catch {
+            toast('Failed to unlink', { type: 'error' })
+        }
     }
 
     return (
@@ -180,78 +239,259 @@ export const StatementPreview = ({ isOpen, onClose, statement, linkedByExpenses,
                                 <TableCell sx={{ bgcolor: 'grey.50' }}>
                                     <strong>Value Date</strong>
                                 </TableCell>
+                                <TableCell
+                                    sx={{ bgcolor: 'grey.50', minWidth: 180 }}
+                                >
+                                    <strong>Partner</strong>
+                                </TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {stavke.map((s, i) => (
-                                <TableRow
-                                    key={i}
-                                    hover
-                                    sx={{
-                                        bgcolor: isLinked(s, i)
-                                            ? 'rgba(46, 125, 50, 0.15)'
-                                            : 'rgba(237, 108, 2, 0.12)',
-                                    }}
-                                >
-                                    <TableCell>
-                                        <Typography
-                                            variant="body2"
-                                            fontWeight={500}
-                                        >
-                                            {s.nalogKorisnik}
-                                        </Typography>
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                        >
-                                            {s.brojRacuna}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2">
-                                            {s.opis}
-                                        </Typography>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={`${s.sifraPlacanja} - ${s.sifraPlacanjaOpis}`}
-                                            size="small"
-                                            variant="outlined"
-                                        />
-                                    </TableCell>
-                                    <TableCell
-                                        align="right"
+                            {stavke.map((s, i) => {
+                                const partnerLink = getPartnerLink(i)
+                                const expenseLink = getExpenseLink(i)
+                                return (
+                                    <TableRow
+                                        key={i}
+                                        hover
                                         sx={{
-                                            color:
-                                                s.duguje > 0
-                                                    ? '#d32f2f'
-                                                    : undefined,
+                                            bgcolor: isLinked(s, i)
+                                                ? 'rgba(46, 125, 50, 0.15)'
+                                                : 'rgba(237, 108, 2, 0.12)',
                                         }}
                                     >
-                                        {s.duguje > 0
-                                            ? `${fmtNum(s.duguje)} ${statement.valuta}`
-                                            : ''}
-                                    </TableCell>
-                                    <TableCell
-                                        align="right"
-                                        sx={{
-                                            color:
-                                                s.potrazuje > 0
-                                                    ? '#2e7d32'
-                                                    : undefined,
-                                        }}
-                                    >
-                                        {s.potrazuje > 0
-                                            ? `${fmtNum(s.potrazuje)} ${statement.valuta}`
-                                            : ''}
-                                    </TableCell>
-                                    <TableCell>{s.datumValute}</TableCell>
-                                </TableRow>
-                            ))}
+                                        <TableCell>
+                                            <Typography
+                                                variant="body2"
+                                                fontWeight={500}
+                                            >
+                                                {s.nalogKorisnik}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                            >
+                                                {s.brojRacuna}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography variant="body2">
+                                                {s.opis}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={`${s.sifraPlacanja} - ${s.sifraPlacanjaOpis}`}
+                                                size="small"
+                                                variant="outlined"
+                                            />
+                                        </TableCell>
+                                        <TableCell
+                                            align="right"
+                                            sx={{
+                                                color:
+                                                    s.duguje > 0
+                                                        ? '#d32f2f'
+                                                        : undefined,
+                                            }}
+                                        >
+                                            {s.duguje > 0
+                                                ? `${fmtNum(s.duguje)} ${statement.valuta}`
+                                                : ''}
+                                        </TableCell>
+                                        <TableCell
+                                            align="right"
+                                            sx={{
+                                                color:
+                                                    s.potrazuje > 0
+                                                        ? '#2e7d32'
+                                                        : undefined,
+                                            }}
+                                        >
+                                            {s.potrazuje > 0
+                                                ? `${fmtNum(s.potrazuje)} ${statement.valuta}`
+                                                : ''}
+                                        </TableCell>
+                                        <TableCell>{s.datumValute}</TableCell>
+                                        <TableCell>
+                                            {partnerLink ? (
+                                                <Box
+                                                    sx={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 0.5,
+                                                    }}
+                                                >
+                                                    <Chip
+                                                        label={
+                                                            partnerLink.partnerName
+                                                        }
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ color: '#000' }}
+                                                    />
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() =>
+                                                            handleUnlinkPartner(
+                                                                partnerLink,
+                                                            )
+                                                        }
+                                                        title="Unlink partner"
+                                                        sx={{
+                                                            color: '#d32f2f',
+                                                        }}
+                                                    >
+                                                        <LinkOff
+                                                            sx={{
+                                                                fontSize: 16,
+                                                            }}
+                                                        />
+                                                    </IconButton>
+                                                </Box>
+                                            ) : expenseLink ? (
+                                                <Chip
+                                                    label={
+                                                        expenseLink.type === 'forex'
+                                                            ? 'Forex'
+                                                            : expenseLink.partnerName || (expenseLink.type === 'government' ? 'Gov. expense' : 'Expense')
+                                                    }
+                                                    size="small"
+                                                    variant="outlined"
+                                                    sx={{
+                                                        color: '#000',
+                                                        borderColor:
+                                                            expenseLink.type === 'government'
+                                                                ? '#ed6c02'
+                                                                : expenseLink.type === 'forex'
+                                                                    ? '#1976d2'
+                                                                    : undefined,
+                                                    }}
+                                                />
+                                            ) : (
+                                                linking === i ? (
+                                                    <Autocomplete
+                                                        size="small"
+                                                        options={partners}
+                                                        getOptionLabel={(o) =>
+                                                            o.name || ''
+                                                        }
+                                                        onChange={(_, v) =>
+                                                            handleLinkPartner(
+                                                                i,
+                                                                v,
+                                                            )
+                                                        }
+                                                        onBlur={() =>
+                                                            setLinking(null)
+                                                        }
+                                                        openOnFocus
+                                                        autoHighlight
+                                                        renderInput={(
+                                                            params,
+                                                        ) => (
+                                                            <TextField
+                                                                {...params}
+                                                                placeholder="Select partner..."
+                                                                variant="standard"
+                                                                autoFocus
+                                                                sx={{
+                                                                    minWidth: 150,
+                                                                }}
+                                                            />
+                                                        )}
+                                                    />
+                                                ) : (
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            setMenuAnchor(e.currentTarget)
+                                                            setMenuIndex(i)
+                                                        }}
+                                                    >
+                                                        <MoreVert fontSize="small" />
+                                                    </IconButton>
+                                                )
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </DialogContent>
+
+            <Menu
+                anchorEl={menuAnchor}
+                open={!!menuAnchor}
+                onClose={() => setMenuAnchor(null)}
+            >
+                <MenuItem
+                    onClick={() => {
+                        const idx = menuIndex
+                        setMenuAnchor(null)
+                        setMenuIndex(null)
+                        setTimeout(() => setLinking(idx), 150)
+                    }}
+                >
+                    <ListItemIcon>
+                        <PersonAdd fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Map to partner</ListItemText>
+                </MenuItem>
+                {menuIndex !== null &&
+                    stavke[menuIndex]?.duguje > 0 && ([
+                        <MenuItem
+                            key="expense"
+                            onClick={() => {
+                                const idx = menuIndex
+                                const s = stavke[idx]
+                                setMenuAnchor(null)
+                                setMenuIndex(null)
+                                onCreateExpense?.({
+                                    statementKey: statement.key,
+                                    index: idx,
+                                    amount: s.duguje,
+                                    currency: statement.valuta || 'RSD',
+                                    datumValute: s.datumValute,
+                                    nalogKorisnik: s.nalogKorisnik || '',
+                                    opis: s.opis || '',
+                                    partija: statement.partija,
+                                })
+                            }}
+                        >
+                            <ListItemIcon>
+                                <Receipt fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText>Create expense</ListItemText>
+                        </MenuItem>,
+                        <MenuItem
+                            key="gov-expense"
+                            onClick={() => {
+                                const idx = menuIndex
+                                const s = stavke[idx]
+                                setMenuAnchor(null)
+                                setMenuIndex(null)
+                                onCreateGovernmentExpense?.({
+                                    statementKey: statement.key,
+                                    index: idx,
+                                    amount: s.duguje,
+                                    currency: statement.valuta || 'RSD',
+                                    datumValute: s.datumValute,
+                                    nalogKorisnik: s.nalogKorisnik || '',
+                                    opis: s.opis || '',
+                                    partija: statement.partija,
+                                })
+                            }}
+                        >
+                            <ListItemIcon>
+                                <AccountBalance fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText>Create government expense</ListItemText>
+                        </MenuItem>,
+                    ])}
+            </Menu>
         </Dialog>
     )
 }

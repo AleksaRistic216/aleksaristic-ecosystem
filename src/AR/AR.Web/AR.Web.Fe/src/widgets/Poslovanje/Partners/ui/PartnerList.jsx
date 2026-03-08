@@ -47,6 +47,9 @@ export const PartnerList = () => {
     const [statements, setStatements] = useState([])
     const [employees, setEmployees] = useState([])
     const [employeeTransactions, setEmployeeTransactions] = useState([])
+    const [transactionPartners, setTransactionPartners] = useState([])
+    const [governmentExpenses, setGovernmentExpenses] = useState([])
+    const [forexExchanges, setForexExchanges] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editPartner, setEditPartner] = useState(null)
     const [viewPartnerKey, setViewPartnerKey] = useState(null)
@@ -59,6 +62,13 @@ export const PartnerList = () => {
         const unsub5 = poslovanjService.onEmployees(setEmployees)
         const unsub6 =
             poslovanjService.onEmployeeTransactions(setEmployeeTransactions)
+        const unsub7 = poslovanjService.onTransactionPartners(
+            setTransactionPartners,
+        )
+        const unsub8 = poslovanjService.onGovernmentExpenses(
+            setGovernmentExpenses,
+        )
+        const unsub9 = poslovanjService.onForexExchanges(setForexExchanges)
         return () => {
             unsub1()
             unsub2()
@@ -66,6 +76,9 @@ export const PartnerList = () => {
             unsub4()
             unsub5()
             unsub6()
+            unsub7()
+            unsub8()
+            unsub9()
         }
     }, [])
 
@@ -100,8 +113,26 @@ export const PartnerList = () => {
                 map[exp.partnerKey].expenseTotal += exp.amount || 0
             }
         })
+        governmentExpenses.forEach((exp) => {
+            if (exp.partnerKey && map[exp.partnerKey]) {
+                map[exp.partnerKey].expenseCount++
+                map[exp.partnerKey].expenseTotal += exp.amount || 0
+            }
+        })
+        const empPartnerMap = {}
+        employees.forEach((e) => {
+            if (e.partnerKey) empPartnerMap[e.key] = e.partnerKey
+        })
+        employeeTransactions.forEach((t) => {
+            if (t.direction !== 'to') return
+            const pk = empPartnerMap[t.employeeKey]
+            if (pk && map[pk]) {
+                map[pk].expenseCount++
+                map[pk].expenseTotal += t.amount || 0
+            }
+        })
         return map
-    }, [partners, invoices, expenses])
+    }, [partners, invoices, expenses, governmentExpenses, employees, employeeTransactions])
 
     const handleDelete = async (partner) => {
         if (!confirm(`Delete partner "${partner.name}"?`)) return
@@ -149,9 +180,17 @@ export const PartnerList = () => {
                             e.key === t.employeeKey,
                     ),
                 )}
+                transactionPartners={transactionPartners.filter(
+                    (tp) => tp.partnerKey === viewPartner.key,
+                )}
                 statements={statements}
                 accounts={accounts}
                 allPartners={partners}
+                allExpenses={expenses}
+                allInvoices={invoices}
+                allTransactionPartners={transactionPartners}
+                governmentExpenses={governmentExpenses}
+                forexExchanges={forexExchanges}
                 onBack={() => setViewPartnerKey(null)}
                 onEditPartner={() => handleEdit(viewPartner)}
             />

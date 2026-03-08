@@ -2,6 +2,7 @@ import { poslovanjService } from '@/app/services/poslovanjService'
 import {
     Box,
     Button,
+    Checkbox,
     Chip,
     Collapse,
     Dialog,
@@ -9,6 +10,7 @@ import {
     DialogContent,
     DialogTitle,
     FormControl,
+    FormControlLabel,
     IconButton,
     InputLabel,
     MenuItem,
@@ -52,6 +54,7 @@ export const PartnerDialog = ({ isOpen, onClose, partner }) => {
     const [phone, setPhone] = useState('')
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
+    const [isGovernment, setIsGovernment] = useState(false)
     const [invoicePrefix, setInvoicePrefix] = useState('')
     const [representative, setRepresentative] = useState('')
     const [representativeTitle, setRepresentativeTitle] = useState('')
@@ -82,6 +85,7 @@ export const PartnerDialog = ({ isOpen, onClose, partner }) => {
             setEmail(partner.email || '')
             setPhone(partner.phone || '')
             setNotes(partner.notes || '')
+            setIsGovernment(!!partner.isGovernment)
             setInvoicePrefix(partner.invoicePrefix || '')
             setRepresentative(partner.representative || '')
             setRepresentativeTitle(partner.representativeTitle || '')
@@ -108,6 +112,7 @@ export const PartnerDialog = ({ isOpen, onClose, partner }) => {
             setEmail('')
             setPhone('')
             setNotes('')
+            setIsGovernment(false)
             setInvoicePrefix('')
             setRepresentative('')
             setRepresentativeTitle('')
@@ -168,6 +173,7 @@ export const PartnerDialog = ({ isOpen, onClose, partner }) => {
                 email: email.trim(),
                 phone: phone.trim(),
                 notes: notes.trim(),
+                isGovernment,
                 invoicePrefix: invoicePrefix.trim(),
                 representative: representative.trim(),
                 representativeTitle: representativeTitle.trim(),
@@ -240,7 +246,21 @@ export const PartnerDialog = ({ isOpen, onClose, partner }) => {
                     size="small"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    sx={{ mb: 2 }}
+                    sx={{ mb: 1 }}
+                />
+
+                <FormControlLabel
+                    control={
+                        <Checkbox
+                            checked={isGovernment}
+                            onChange={(e) =>
+                                setIsGovernment(e.target.checked)
+                            }
+                            size="small"
+                        />
+                    }
+                    label="Government body"
+                    sx={{ mb: 1, display: 'block' }}
                 />
 
                 <InputLabel sx={{ fontSize: '0.85rem', mb: 0.5 }}>

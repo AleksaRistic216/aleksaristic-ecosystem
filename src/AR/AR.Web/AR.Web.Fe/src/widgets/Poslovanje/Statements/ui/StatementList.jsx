@@ -28,6 +28,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
 import { StatementPreview } from './StatementPreview'
+import { ExpenseDialog } from '../../Expenses/ui/ExpenseDialog'
+import { GovernmentExpenseDialog } from '../../Government/ui/GovernmentExpenseDialog'
 
 const fmtNum = (n) =>
     (n || 0).toLocaleString('sr-RS', {
@@ -40,30 +42,93 @@ export const StatementList = () => {
     const router = useRouter()
     const [statements, setStatements] = useState([])
     const [expenses, setExpenses] = useState([])
+    const [governmentExpenses, setGovernmentExpenses] = useState([])
+    const [forexExchanges, setForexExchanges] = useState([])
     const [invoices, setInvoices] = useState([])
+    const [partners, setPartners] = useState([])
+    const [transactionPartners, setTransactionPartners] = useState([])
+    const [employeeTransactions, setEmployeeTransactions] = useState([])
     const [filterAccount, setFilterAccount] = useState('')
     const [previewStatement, setPreviewStatement] = useState(null)
     const [importing, setImporting] = useState(false)
+    const [expenseDialogOpen, setExpenseDialogOpen] = useState(false)
+    const [expenseDefaults, setExpenseDefaults] = useState(null)
+    const [govExpenseDialogOpen, setGovExpenseDialogOpen] = useState(false)
+    const [govExpenseDefaults, setGovExpenseDefaults] = useState(null)
     const fileInputRef = useRef(null)
 
     useEffect(() => {
         const unsub1 = poslovanjService.onStatements(setStatements)
         const unsub2 = poslovanjService.onExpenses(setExpenses)
-        const unsub3 = poslovanjService.onInvoices(setInvoices)
+        const unsub3 = poslovanjService.onGovernmentExpenses(
+            setGovernmentExpenses,
+        )
+        const unsub4 = poslovanjService.onForexExchanges(setForexExchanges)
+        const unsub5 = poslovanjService.onInvoices(setInvoices)
+        const unsub6 = poslovanjService.onPartners(setPartners)
+        const unsub7 = poslovanjService.onTransactionPartners(
+            setTransactionPartners,
+        )
+        const unsub8 =
+            poslovanjService.onEmployeeTransactions(setEmployeeTransactions)
         return () => {
             unsub1()
             unsub2()
             unsub3()
+            unsub4()
+            unsub5()
+            unsub6()
+            unsub7()
+            unsub8()
         }
     }, [])
 
-    const linkedByExpenses = useMemo(() => {
-        const set = new Set()
-        expenses.forEach((e) => {
-            if (e.transactionRef) set.add(e.transactionRef)
+    const partnerMap = useMemo(() => {
+        const map = {}
+        partners.forEach((p) => {
+            map[p.key] = p.name
         })
-        return set
-    }, [expenses])
+        return map
+    }, [partners])
+
+    const linkedByExpenses = useMemo(() => {
+        const map = new Map()
+        expenses.forEach((e) => {
+            if (e.transactionRef) {
+                map.set(e.transactionRef, {
+                    partnerName: partnerMap[e.partnerKey] || '',
+                    type: 'expense',
+                })
+            }
+        })
+        governmentExpenses.forEach((e) => {
+            if (e.transactionRef) {
+                map.set(e.transactionRef, {
+                    partnerName: partnerMap[e.partnerKey] || '',
+                    type: 'government',
+                })
+            }
+        })
+        forexExchanges.forEach((fx) => {
+            ;(fx.transactions || []).forEach((t) => {
+                if (t.ref) {
+                    map.set(t.ref, {
+                        partnerName: '',
+                        type: 'forex',
+                    })
+                }
+            })
+        })
+        employeeTransactions.forEach((t) => {
+            if (t.transactionRef) {
+                map.set(t.transactionRef, {
+                    partnerName: '',
+                    type: 'employee',
+                })
+            }
+        })
+        return map
+    }, [expenses, governmentExpenses, forexExchanges, employeeTransactions, partnerMap])
 
     const linkedByInvoices = useMemo(() => {
         const set = new Set()
@@ -77,6 +142,16 @@ export const StatementList = () => {
         })
         return set
     }, [invoices])
+
+    const linkedByPartners = useMemo(() => {
+        const map = new Map()
+        transactionPartners.forEach((tp) => {
+            if (tp.transactionRef) {
+                map.set(tp.transactionRef, tp)
+            }
+        })
+        return map
+    }, [transactionPartners])
 
     const statementStatus = useMemo(() => {
         const map = {}
@@ -92,14 +167,46 @@ export const StatementList = () => {
             }
             const allLinked = stavke.every((t, i) => {
                 const id = `${s.key}::${i}`
+                if (linkedByPartners.has(id)) return true
                 if (t.duguje > 0) return linkedByExpenses.has(id)
-                if (t.potrazuje > 0) return linkedByInvoices.has(id)
+                if (t.potrazuje > 0) return linkedByInvoices.has(id) || linkedByExpenses.has(id)
                 return true
             })
             map[s.key] = allLinked ? 'complete' : 'partial'
         })
         return map
-    }, [statements, linkedByExpenses, linkedByInvoices])
+    }, [statements, linkedByExpenses, linkedByInvoices, linkedByPartners])
+
+    const unlinkedItems = useMemo(() => {
+        const items = []
+        statements.forEach((s) => {
+            if (filterAccount && s.partija !== filterAccount) return
+            const stavke = s.stavke
+                ? Array.isArray(s.stavke)
+                    ? s.stavke
+                    : Object.values(s.stavke)
+                : []
+            stavke.forEach((t, i) => {
+                const id = `${s.key}::${i}`
+                if (linkedByPartners.has(id)) return
+                if (t.duguje > 0 && linkedByExpenses.has(id)) return
+                if (t.potrazuje > 0 && (linkedByInvoices.has(id) || linkedByExpenses.has(id))) return
+                if (t.duguje <= 0 && t.potrazuje <= 0) return
+                items.push({
+                    id,
+                    statement: s,
+                    stavka: t,
+                    index: i,
+                })
+            })
+        })
+        items.sort((a, b) => {
+            const da = (a.stavka.datumValute || '').split('.').reverse().join('')
+            const db = (b.stavka.datumValute || '').split('.').reverse().join('')
+            return db.localeCompare(da)
+        })
+        return items
+    }, [statements, filterAccount, linkedByExpenses, linkedByInvoices, linkedByPartners])
 
     const accountSummaries = useMemo(() => {
         const map = {}
@@ -139,6 +246,31 @@ export const StatementList = () => {
         })
         return list
     }, [statements, filterAccount])
+
+    const accounts = useMemo(() => {
+        const map = {}
+        statements.forEach((s) => {
+            if (!map[s.partija]) {
+                map[s.partija] = {
+                    partija: s.partija,
+                    valuta: s.valuta || 'RSD',
+                }
+            }
+        })
+        return Object.values(map).sort((a, b) =>
+            a.partija.localeCompare(b.partija),
+        )
+    }, [statements])
+
+    const handleCreateExpense = (txData) => {
+        setExpenseDefaults(txData)
+        setExpenseDialogOpen(true)
+    }
+
+    const handleCreateGovernmentExpense = (txData) => {
+        setGovExpenseDefaults(txData)
+        setGovExpenseDialogOpen(true)
+    }
 
     const handleImport = () => {
         fileInputRef.current.value = ''
@@ -360,6 +492,98 @@ export const StatementList = () => {
 
                 {importing && <LinearProgress sx={{ mb: 1 }} />}
 
+                {unlinkedItems.length > 0 && (
+                    <>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                            Unlinked Transactions ({unlinkedItems.length})
+                        </Typography>
+                        <TableContainer
+                            component={Paper}
+                            variant="outlined"
+                            sx={{ mb: 3, maxHeight: 400 }}
+                        >
+                            <Table size="small" stickyHeader>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                                            <strong>Statement</strong>
+                                        </TableCell>
+                                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                                            <strong>Payer / Payee</strong>
+                                        </TableCell>
+                                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                                            <strong>Description</strong>
+                                        </TableCell>
+                                        <TableCell align="right" sx={{ bgcolor: 'grey.50' }}>
+                                            <strong>Amount</strong>
+                                        </TableCell>
+                                        <TableCell sx={{ bgcolor: 'grey.50' }}>
+                                            <strong>Date</strong>
+                                        </TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {unlinkedItems.map((item) => {
+                                        const isDebit = item.stavka.duguje > 0
+                                        const amount = isDebit
+                                            ? item.stavka.duguje
+                                            : item.stavka.potrazuje
+                                        return (
+                                            <TableRow
+                                                key={item.id}
+                                                hover
+                                                sx={{ cursor: 'pointer' }}
+                                                onClick={() =>
+                                                    setPreviewStatement(item.statement)
+                                                }
+                                            >
+                                                <TableCell>
+                                                    <Typography variant="body2" fontWeight={500}>
+                                                        #{item.statement.brojIzvoda}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {item.statement.partija}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {item.stavka.nalogKorisnik || '—'}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {item.stavka.brojRacuna || ''}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {item.stavka.opis || '—'}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell
+                                                    align="right"
+                                                    sx={{
+                                                        fontWeight: 600,
+                                                        color: isDebit ? '#d32f2f' : '#2e7d32',
+                                                    }}
+                                                >
+                                                    {isDebit ? '−' : '+'}
+                                                    {fmtNum(amount)}{' '}
+                                                    {item.statement.valuta || 'RSD'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {item.stavka.datumValute || '—'}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </>
+                )}
+
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Statements ({filtered.length})
+                </Typography>
                 <TableContainer component={Paper} variant="outlined">
                     <Table size="small">
                         <TableHead>
@@ -499,6 +723,37 @@ export const StatementList = () => {
                 statement={previewStatement}
                 linkedByExpenses={linkedByExpenses}
                 linkedByInvoices={linkedByInvoices}
+                linkedByPartners={linkedByPartners}
+                partners={partners}
+                onCreateExpense={handleCreateExpense}
+                onCreateGovernmentExpense={handleCreateGovernmentExpense}
+            />
+
+            <ExpenseDialog
+                isOpen={expenseDialogOpen}
+                onClose={() => {
+                    setExpenseDialogOpen(false)
+                    setExpenseDefaults(null)
+                }}
+                expense={null}
+                accounts={accounts}
+                statements={statements}
+                partners={partners}
+                allExpenses={expenses}
+                defaultTransaction={expenseDefaults}
+            />
+
+            <GovernmentExpenseDialog
+                isOpen={govExpenseDialogOpen}
+                onClose={() => {
+                    setGovExpenseDialogOpen(false)
+                    setGovExpenseDefaults(null)
+                }}
+                expense={null}
+                partners={partners.filter((p) => p.isGovernment)}
+                accounts={accounts}
+                statements={statements}
+                defaultTransaction={govExpenseDefaults}
             />
         </Grid>
     )

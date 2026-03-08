@@ -35,7 +35,7 @@ const normalizeStavke = (stavke) => {
     return Object.entries(stavke).map(([key, val]) => ({ ...val, _key: key }))
 }
 
-export const StatementLinkDialog = ({ isOpen, onClose, invoice, statements }) => {
+export const StatementLinkDialog = ({ isOpen, onClose, invoice, statements, allInvoices = [] }) => {
     const [filterAccount, setFilterAccount] = useState('')
     const [filterSearch, setFilterSearch] = useState('')
 
@@ -50,6 +50,19 @@ export const StatementLinkDialog = ({ isOpen, onClose, invoice, statements }) =>
         return Array.from(set).sort()
     }, [statements])
 
+    const linkedRefs = useMemo(() => {
+        const set = new Set()
+        allInvoices.forEach((inv) => {
+            if (inv.linkedStatement && inv.key !== invoice?.key) {
+                const { statementKey, stavkaIndex } = inv.linkedStatement
+                if (statementKey != null && stavkaIndex != null) {
+                    set.add(`${statementKey}::${stavkaIndex}`)
+                }
+            }
+        })
+        return set
+    }, [allInvoices, invoice])
+
     const creditItems = useMemo(() => {
         const items = []
         for (const s of statements) {
@@ -57,6 +70,8 @@ export const StatementLinkDialog = ({ isOpen, onClose, invoice, statements }) =>
             const stavke = normalizeStavke(s.stavke)
             stavke.forEach((stavka, index) => {
                 if (stavka.potrazuje > 0) {
+                    const ref = `${s.key}::${index}`
+                    if (linkedRefs.has(ref)) return
                     items.push({
                         statementKey: s.key,
                         stavkaIndex: index,
@@ -79,7 +94,7 @@ export const StatementLinkDialog = ({ isOpen, onClose, invoice, statements }) =>
             return db.localeCompare(da)
         })
         return items
-    }, [statements, filterAccount])
+    }, [statements, filterAccount, linkedRefs])
 
     const filtered = useMemo(() => {
         if (!filterSearch) return creditItems
