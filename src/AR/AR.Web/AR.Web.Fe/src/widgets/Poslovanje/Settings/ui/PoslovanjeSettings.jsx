@@ -6,6 +6,7 @@ import { useAuth } from '@/app/context/AuthContext'
 import { ReceiverManager } from './ReceiverManager'
 import { TemplateManager } from './TemplateManager'
 import { ProviderSettings } from './ProviderSettings'
+import { EmailSettings } from './EmailSettings'
 
 export const PoslovanjeSettings = () => {
     const { isAdmin } = useAuth()
@@ -28,10 +29,12 @@ export const PoslovanjeSettings = () => {
                 <Tab label="Receivers" />
                 <Tab label="Templates" />
                 <Tab label="Provider Info" />
+                <Tab label="Email" />
             </Tabs>
             {tab === 0 && <ReceiverManager />}
             {tab === 1 && <TemplateManager />}
             {tab === 2 && <ProviderSettings />}
+            {tab === 3 && <EmailSettings />}
         </Box>
     )
 }

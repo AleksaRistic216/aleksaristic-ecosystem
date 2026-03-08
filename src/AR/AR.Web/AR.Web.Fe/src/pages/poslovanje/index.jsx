@@ -2,7 +2,7 @@ import { Layout } from '@/widgets/Layout'
 import { useAuth } from '@/app/context/AuthContext'
 import { AuthButton } from '@/widgets/Auth'
 import { Card, CardContent, Grid, Typography } from '@mui/material'
-import { Receipt, Settings } from '@mui/icons-material'
+import { Receipt, Settings, Mail } from '@mui/icons-material'
 import { useRouter } from 'next/router'
 
 const Poslovanje = () => {
@@ -62,6 +62,33 @@ const Poslovanje = () => {
                                         color="text.secondary"
                                     >
                                         Manage and print invoices
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <Card
+                                variant="outlined"
+                                sx={{
+                                    cursor: 'pointer',
+                                    '&:hover': { boxShadow: 2 },
+                                }}
+                                onClick={() =>
+                                    router.push('/poslovanje/envelope')
+                                }
+                            >
+                                <CardContent
+                                    sx={{ textAlign: 'center', py: 4 }}
+                                >
+                                    <Mail sx={{ fontSize: 48, mb: 1 }} />
+                                    <Typography variant="h6">
+                                        Envelope
+                                    </Typography>
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                    >
+                                        Send documents to bookkeeper
                                     </Typography>
                                 </CardContent>
                             </Card>

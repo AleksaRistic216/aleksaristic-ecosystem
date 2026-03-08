@@ -64,6 +64,16 @@ export const poslovanjService = {
         return { key: newRef.key, ...doc }
     },
 
+    async markAttachmentSent(invoiceKey, attachmentKey, sentTo) {
+        const historyRef = push(
+            ref(
+                db,
+                `/poslovanje-invoices/${invoiceKey}/attachments/${attachmentKey}/sendHistory`,
+            ),
+        )
+        await set(historyRef, { sentAt: Date.now(), sentTo })
+    },
+
     async removeAttachment(invoiceKey, attachmentKey) {
         await remove(
             ref(
@@ -138,5 +148,16 @@ export const poslovanjService = {
 
     async updateProvider(provider) {
         await set(ref(db, '/poslovanje-provider'), provider)
+    },
+
+    // Email settings (singleton)
+    onEmailSettings(callback) {
+        return onValue(ref(db, '/poslovanje-email-settings'), (snapshot) => {
+            callback(snapshot.exists() ? snapshot.val() : null)
+        })
+    },
+
+    async updateEmailSettings(settings) {
+        await set(ref(db, '/poslovanje-email-settings'), settings)
     },
 }
