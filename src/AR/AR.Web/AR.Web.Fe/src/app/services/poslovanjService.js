@@ -259,4 +259,98 @@ export const poslovanjService = {
             ),
         )
     },
+
+    // Employees
+    onEmployees(callback) {
+        return onValue(ref(db, '/poslovanje-employees'), (snapshot) => {
+            if (!snapshot.exists()) return callback([])
+            const data = snapshot.val()
+            callback(
+                Object.entries(data).map(([key, val]) => ({ key, ...val })),
+            )
+        })
+    },
+
+    async createEmployee(employee) {
+        const newRef = push(ref(db, '/poslovanje-employees'))
+        await set(newRef, { ...employee, createdAt: Date.now() })
+        return newRef.key
+    },
+
+    async updateEmployee(key, employee) {
+        await update(ref(db, `/poslovanje-employees/${key}`), {
+            ...employee,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async deleteEmployee(key) {
+        await remove(ref(db, `/poslovanje-employees/${key}`))
+    },
+
+    // Employee transactions
+    onEmployeeTransactions(callback) {
+        return onValue(
+            ref(db, '/poslovanje-employee-transactions'),
+            (snapshot) => {
+                if (!snapshot.exists()) return callback([])
+                const data = snapshot.val()
+                callback(
+                    Object.entries(data).map(([key, val]) => ({
+                        key,
+                        ...val,
+                    })),
+                )
+            },
+        )
+    },
+
+    async createEmployeeTransaction(transaction) {
+        const newRef = push(ref(db, '/poslovanje-employee-transactions'))
+        await set(newRef, { ...transaction, createdAt: Date.now() })
+        return newRef.key
+    },
+
+    async updateEmployeeTransaction(key, transaction) {
+        await update(ref(db, `/poslovanje-employee-transactions/${key}`), {
+            ...transaction,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async deleteEmployeeTransaction(key) {
+        await remove(ref(db, `/poslovanje-employee-transactions/${key}`))
+    },
+
+    async addEmployeeTransactionAttachment(txKey, file) {
+        const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+        })
+        const newRef = push(
+            ref(
+                db,
+                `/poslovanje-employee-transactions/${txKey}/attachments`,
+            ),
+        )
+        const doc = {
+            data,
+            name: file.name,
+            type: file.type,
+            uploadedAt: Date.now(),
+        }
+        await set(newRef, doc)
+        return { key: newRef.key, ...doc }
+    },
+
+    async removeEmployeeTransactionAttachment(txKey, attachmentKey) {
+        await remove(
+            ref(
+                db,
+                `/poslovanje-employee-transactions/${txKey}/attachments/${attachmentKey}`,
+            ),
+        )
+    },
 }

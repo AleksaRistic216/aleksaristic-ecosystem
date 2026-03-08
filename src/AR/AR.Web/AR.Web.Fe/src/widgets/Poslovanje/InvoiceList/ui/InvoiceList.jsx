@@ -23,7 +23,7 @@ import {
     Tooltip,
     Typography,
 } from '@mui/material'
-import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo, AttachFile, Link as LinkIcon } from '@mui/icons-material'
+import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo, AttachFile, Link as LinkIcon, CheckCircle } from '@mui/icons-material'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
@@ -47,10 +47,11 @@ export const InvoiceList = () => {
     const [isEditorOpen, setIsEditorOpen] = useState(false)
     const [editingInvoice, setEditingInvoice] = useState(null)
     const [editorMode, setEditorMode] = useState('create')
+    const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()))
     const [filterStatus, setFilterStatus] = useState('')
     const [filterReceiver, setFilterReceiver] = useState('')
     const [filterSearch, setFilterSearch] = useState('')
-    const [sortField, setSortField] = useState('createdAt')
+    const [sortField, setSortField] = useState('date')
     const [sortDir, setSortDir] = useState('desc')
     const [attachmentsInvoice, setAttachmentsInvoice] = useState(null)
     const [statements, setStatements] = useState([])
@@ -93,7 +94,7 @@ export const InvoiceList = () => {
     }
 
     const handleClone = async (invoice) => {
-        const { key, createdAt, updatedAt, ...data } = invoice
+        const { key, createdAt, updatedAt, attachments, linkedStatement, ...data } = invoice
         try {
             await poslovanjService.createInvoice({
                 ...data,
@@ -118,6 +119,15 @@ export const InvoiceList = () => {
             toast('Invoice reverted to draft', { type: 'success' })
         } catch (error) {
             toast('Failed to revert', { type: 'error' })
+        }
+    }
+
+    const handleMarkPaid = async (invoice) => {
+        try {
+            await poslovanjService.updateInvoice(invoice.key, { status: 'paid' })
+            toast('Invoice marked as paid', { type: 'success' })
+        } catch (error) {
+            toast('Failed to update status', { type: 'error' })
         }
     }
 
@@ -235,9 +245,27 @@ export const InvoiceList = () => {
         }
     }
 
+    const availableYears = useMemo(() => {
+        const years = new Set()
+        invoices.forEach((inv) => {
+            if (inv.date) {
+                const d = new Date(inv.date)
+                if (!isNaN(d)) years.add(String(d.getFullYear()))
+            }
+        })
+        return [...years].sort().reverse()
+    }, [invoices])
+
     const sorted = useMemo(() => {
         let list = [...invoices]
 
+        if (filterYear) {
+            list = list.filter((inv) => {
+                if (!inv.date) return false
+                const d = new Date(inv.date)
+                return !isNaN(d) && String(d.getFullYear()) === filterYear
+            })
+        }
         if (filterStatus) {
             list = list.filter((inv) => (inv.status || 'draft') === filterStatus)
         }
@@ -265,8 +293,11 @@ export const InvoiceList = () => {
                     const bNum = (getReceiver(b)?.invoicePrefix || '') + b.invoiceNumber
                     return dir * aNum.localeCompare(bNum)
                 }
-                case 'date':
-                    return dir * (a.date || '').localeCompare(b.date || '')
+                case 'date': {
+                    const aTime = a.date ? new Date(a.date).getTime() : 0
+                    const bTime = b.date ? new Date(b.date).getTime() : 0
+                    return dir * (aTime - bTime)
+                }
                 case 'receiver': {
                     const aName = getReceiver(a)?.name || ''
                     const bName = getReceiver(b)?.name || ''
@@ -283,7 +314,7 @@ export const InvoiceList = () => {
         })
 
         return list
-    }, [invoices, filterStatus, filterReceiver, filterSearch, sortField, sortDir, receivers])
+    }, [invoices, filterYear, filterStatus, filterReceiver, filterSearch, sortField, sortDir, receivers])
 
     if (!isAdmin) return null
 
@@ -320,6 +351,21 @@ export const InvoiceList = () => {
                 </Box>
 
                 <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                    <FormControl size="small" sx={{ minWidth: 100 }}>
+                        <InputLabel>Year</InputLabel>
+                        <Select
+                            value={filterYear}
+                            label="Year"
+                            onChange={(e) => setFilterYear(e.target.value)}
+                        >
+                            <MenuItem value="">All</MenuItem>
+                            {availableYears.map((y) => (
+                                <MenuItem key={y} value={y}>
+                                    {y}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                     <TextField
                         size="small"
                         placeholder="Search..."
@@ -453,13 +499,25 @@ export const InvoiceList = () => {
                                                 <Edit fontSize="small" />
                                             </IconButton>
                                         ) : (
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleRevertToDraft(inv)}
-                                                title="Revert to Draft"
-                                            >
-                                                <Undo fontSize="small" />
-                                            </IconButton>
+                                            <>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => handleRevertToDraft(inv)}
+                                                    title="Revert to Draft"
+                                                >
+                                                    <Undo fontSize="small" />
+                                                </IconButton>
+                                                {inv.status === 'sent' && (
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() => handleMarkPaid(inv)}
+                                                        title="Mark as Paid"
+                                                        sx={{ color: '#2e7d32' }}
+                                                    >
+                                                        <CheckCircle fontSize="small" />
+                                                    </IconButton>
+                                                )}
+                                            </>
                                         )}
                                         <IconButton
                                             size="small"
