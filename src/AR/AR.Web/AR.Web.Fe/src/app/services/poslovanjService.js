@@ -100,31 +100,6 @@ export const poslovanjService = {
         })
     },
 
-    // Receivers
-    onReceivers(callback) {
-        return onValue(ref(db, '/poslovanje-receivers'), (snapshot) => {
-            if (!snapshot.exists()) return callback([])
-            const data = snapshot.val()
-            callback(
-                Object.entries(data).map(([key, val]) => ({ key, ...val })),
-            )
-        })
-    },
-
-    async createReceiver(receiver) {
-        const newRef = push(ref(db, '/poslovanje-receivers'))
-        await set(newRef, receiver)
-        return newRef.key
-    },
-
-    async updateReceiver(key, receiver) {
-        await update(ref(db, `/poslovanje-receivers/${key}`), receiver)
-    },
-
-    async deleteReceiver(key) {
-        await remove(ref(db, `/poslovanje-receivers/${key}`))
-    },
-
     // Templates
     onTemplates(callback) {
         return onValue(ref(db, '/poslovanje-templates'), (snapshot) => {
@@ -352,5 +327,33 @@ export const poslovanjService = {
                 `/poslovanje-employee-transactions/${txKey}/attachments/${attachmentKey}`,
             ),
         )
+    },
+
+    // Partners
+    onPartners(callback) {
+        return onValue(ref(db, '/poslovanje-partners'), (snapshot) => {
+            if (!snapshot.exists()) return callback([])
+            const data = snapshot.val()
+            callback(
+                Object.entries(data).map(([key, val]) => ({ key, ...val })),
+            )
+        })
+    },
+
+    async createPartner(partner) {
+        const newRef = push(ref(db, '/poslovanje-partners'))
+        await set(newRef, { ...partner, createdAt: Date.now() })
+        return newRef.key
+    },
+
+    async updatePartner(key, partner) {
+        await update(ref(db, `/poslovanje-partners/${key}`), {
+            ...partner,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async deletePartner(key) {
+        await remove(ref(db, `/poslovanje-partners/${key}`))
     },
 }

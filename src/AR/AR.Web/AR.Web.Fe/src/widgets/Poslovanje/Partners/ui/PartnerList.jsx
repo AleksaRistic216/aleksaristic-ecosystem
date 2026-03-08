@@ -27,8 +27,8 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
-import { EmployeeDialog } from './EmployeeDialog'
-import { EmployeeDetail } from './EmployeeDetail'
+import { PartnerDialog } from './PartnerDialog'
+import { PartnerDetail } from './PartnerDetail'
 
 const fmtNum = (n) =>
     (n || 0).toLocaleString('sr-RS', {
@@ -36,29 +36,36 @@ const fmtNum = (n) =>
         maximumFractionDigits: 2,
     })
 
-export const EmployeeList = () => {
+export const PartnerList = () => {
     const { isAdmin } = useAuth()
     const router = useRouter()
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-    const [employees, setEmployees] = useState([])
-    const [transactions, setTransactions] = useState([])
-    const [statements, setStatements] = useState([])
     const [partners, setPartners] = useState([])
+    const [invoices, setInvoices] = useState([])
+    const [expenses, setExpenses] = useState([])
+    const [statements, setStatements] = useState([])
+    const [employees, setEmployees] = useState([])
+    const [employeeTransactions, setEmployeeTransactions] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
-    const [editEmployee, setEditEmployee] = useState(null)
-    const [viewEmployee, setViewEmployee] = useState(null)
+    const [editPartner, setEditPartner] = useState(null)
+    const [viewPartnerKey, setViewPartnerKey] = useState(null)
 
     useEffect(() => {
-        const unsub1 = poslovanjService.onEmployees(setEmployees)
-        const unsub2 = poslovanjService.onEmployeeTransactions(setTransactions)
-        const unsub3 = poslovanjService.onStatements(setStatements)
-        const unsub4 = poslovanjService.onPartners(setPartners)
+        const unsub1 = poslovanjService.onPartners(setPartners)
+        const unsub2 = poslovanjService.onInvoices(setInvoices)
+        const unsub3 = poslovanjService.onExpenses(setExpenses)
+        const unsub4 = poslovanjService.onStatements(setStatements)
+        const unsub5 = poslovanjService.onEmployees(setEmployees)
+        const unsub6 =
+            poslovanjService.onEmployeeTransactions(setEmployeeTransactions)
         return () => {
             unsub1()
             unsub2()
             unsub3()
             unsub4()
+            unsub5()
+            unsub6()
         }
     }, [])
 
@@ -77,63 +84,76 @@ export const EmployeeList = () => {
         )
     }, [statements])
 
-    const employeeSummaries = useMemo(() => {
+    const partnerStats = useMemo(() => {
         const map = {}
-        employees.forEach((e) => {
-            map[e.key] = { toEmployee: 0, fromEmployee: 0 }
+        partners.forEach((p) => {
+            map[p.key] = { invoiceCount: 0, expenseCount: 0, expenseTotal: 0 }
         })
-        transactions.forEach((t) => {
-            if (!map[t.employeeKey]) return
-            const amount = t.amount || 0
-            if (t.direction === 'to') {
-                map[t.employeeKey].toEmployee += amount
-            } else {
-                map[t.employeeKey].fromEmployee += amount
+        invoices.forEach((inv) => {
+            if (inv.receiverId && map[inv.receiverId]) {
+                map[inv.receiverId].invoiceCount++
+            }
+        })
+        expenses.forEach((exp) => {
+            if (exp.partnerKey && map[exp.partnerKey]) {
+                map[exp.partnerKey].expenseCount++
+                map[exp.partnerKey].expenseTotal += exp.amount || 0
             }
         })
         return map
-    }, [employees, transactions])
+    }, [partners, invoices, expenses])
 
-    const partnerMap = useMemo(() => {
-        const map = {}
-        partners.forEach((p) => {
-            map[p.key] = p.name
-        })
-        return map
-    }, [partners])
-
-    const handleDelete = async (employee) => {
-        if (!confirm(`Delete employee "${employee.name}"?`)) return
+    const handleDelete = async (partner) => {
+        if (!confirm(`Delete partner "${partner.name}"?`)) return
         try {
-            await poslovanjService.deleteEmployee(employee.key)
-            toast('Employee deleted', { type: 'success' })
+            await poslovanjService.deletePartner(partner.key)
+            toast('Partner deleted', { type: 'success' })
         } catch (error) {
             toast('Failed to delete', { type: 'error' })
         }
     }
 
     const handleNew = () => {
-        setEditEmployee(null)
+        setEditPartner(null)
         setDialogOpen(true)
     }
 
-    const handleEdit = (employee) => {
-        setEditEmployee(employee)
+    const handleEdit = (partner) => {
+        setEditPartner(partner)
         setDialogOpen(true)
     }
 
     if (!isAdmin) return null
 
-    if (viewEmployee) {
+    const viewPartner = viewPartnerKey
+        ? partners.find((p) => p.key === viewPartnerKey)
+        : null
+
+    if (viewPartner) {
         return (
-            <EmployeeDetail
-                employee={viewEmployee}
-                transactions={transactions.filter(
-                    (t) => t.employeeKey === viewEmployee.key,
+            <PartnerDetail
+                partner={viewPartner}
+                invoices={invoices.filter(
+                    (i) => i.receiverId === viewPartner.key,
+                )}
+                expenses={expenses.filter(
+                    (e) => e.partnerKey === viewPartner.key,
+                )}
+                employees={employees.filter(
+                    (e) => e.partnerKey === viewPartner.key,
+                )}
+                employeeTransactions={employeeTransactions.filter((t) =>
+                    employees.some(
+                        (e) =>
+                            e.partnerKey === viewPartner.key &&
+                            e.key === t.employeeKey,
+                    ),
                 )}
                 statements={statements}
                 accounts={accounts}
-                onBack={() => setViewEmployee(null)}
+                allPartners={partners}
+                onBack={() => setViewPartnerKey(null)}
+                onEditPartner={() => handleEdit(viewPartner)}
             />
         )
     }
@@ -171,7 +191,7 @@ export const EmployeeList = () => {
                             variant={isMobile ? 'h6' : 'h5'}
                             fontWeight={600}
                         >
-                            Employees
+                            Partners
                         </Typography>
                     </Box>
                     <Button
@@ -181,13 +201,13 @@ export const EmployeeList = () => {
                         size={isMobile ? 'small' : 'medium'}
                         sx={{ textTransform: 'none' }}
                     >
-                        {isMobile ? 'New' : 'New Employee'}
+                        {isMobile ? 'New' : 'New Partner'}
                     </Button>
                 </Box>
 
                 {isMobile ? (
                     <>
-                        {employees.length === 0 && (
+                        {partners.length === 0 && (
                             <Paper
                                 variant="outlined"
                                 sx={{
@@ -196,14 +216,14 @@ export const EmployeeList = () => {
                                     color: 'text.secondary',
                                 }}
                             >
-                                No employees yet
+                                No partners yet
                             </Paper>
                         )}
-                        {employees.map((e) => {
-                            const summary = employeeSummaries[e.key] || {}
+                        {partners.map((p) => {
+                            const stats = partnerStats[p.key] || {}
                             return (
                                 <Paper
-                                    key={e.key}
+                                    key={p.key}
                                     variant="outlined"
                                     sx={{ mb: 1.5, p: 2 }}
                                 >
@@ -221,48 +241,37 @@ export const EmployeeList = () => {
                                                 fontWeight={600}
                                                 noWrap
                                             >
-                                                {e.name}
+                                                {p.name}
                                             </Typography>
-                                            <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                            >
-                                                {[
-                                                    e.position,
-                                                    partnerMap[e.partnerKey],
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(' · ') || ''}
-                                            </Typography>
+                                            {p.taxId && (
+                                                <Typography
+                                                    variant="caption"
+                                                    color="text.secondary"
+                                                >
+                                                    {p.taxId}
+                                                </Typography>
+                                            )}
                                         </Box>
                                     </Box>
                                     <Box
                                         sx={{
                                             display: 'flex',
-                                            gap: 1,
+                                            gap: 0.5,
                                             flexWrap: 'wrap',
                                             mb: 1,
                                         }}
                                     >
-                                        {summary.toEmployee > 0 && (
+                                        {stats.invoiceCount > 0 && (
                                             <Chip
-                                                label={`Paid: ${fmtNum(summary.toEmployee)} RSD`}
+                                                label={`${stats.invoiceCount} invoice(s)`}
                                                 size="small"
-                                                sx={{
-                                                    color: '#d32f2f',
-                                                    borderColor: '#d32f2f',
-                                                }}
                                                 variant="outlined"
                                             />
                                         )}
-                                        {summary.fromEmployee > 0 && (
+                                        {stats.expenseCount > 0 && (
                                             <Chip
-                                                label={`Received: ${fmtNum(summary.fromEmployee)} RSD`}
+                                                label={`${stats.expenseCount} expense(s)`}
                                                 size="small"
-                                                sx={{
-                                                    color: '#2e7d32',
-                                                    borderColor: '#2e7d32',
-                                                }}
                                                 variant="outlined"
                                             />
                                         )}
@@ -276,19 +285,21 @@ export const EmployeeList = () => {
                                     >
                                         <IconButton
                                             size="small"
-                                            onClick={() => setViewEmployee(e)}
+                                            onClick={() =>
+                                                setViewPartnerKey(p.key)
+                                            }
                                         >
                                             <Visibility fontSize="small" />
                                         </IconButton>
                                         <IconButton
                                             size="small"
-                                            onClick={() => handleEdit(e)}
+                                            onClick={() => handleEdit(p)}
                                         >
                                             <Edit fontSize="small" />
                                         </IconButton>
                                         <IconButton
                                             size="small"
-                                            onClick={() => handleDelete(e)}
+                                            onClick={() => handleDelete(p)}
                                             sx={{ color: '#d32f2f' }}
                                         >
                                             <Delete fontSize="small" />
@@ -307,19 +318,16 @@ export const EmployeeList = () => {
                                         <strong>Name</strong>
                                     </TableCell>
                                     <TableCell>
-                                        <strong>Position</strong>
+                                        <strong>Tax ID</strong>
                                     </TableCell>
-                                    <TableCell>
-                                        <strong>Partner</strong>
+                                    <TableCell align="center">
+                                        <strong>Invoices</strong>
                                     </TableCell>
-                                    <TableCell align="right">
-                                        <strong>Paid Out</strong>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <strong>Received</strong>
+                                    <TableCell align="center">
+                                        <strong>Expenses</strong>
                                     </TableCell>
                                     <TableCell align="right">
-                                        <strong>Balance</strong>
+                                        <strong>Expense Total</strong>
                                     </TableCell>
                                     <TableCell align="center">
                                         <strong>Actions</strong>
@@ -327,75 +335,50 @@ export const EmployeeList = () => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {employees.length === 0 && (
+                                {partners.length === 0 && (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={7}
+                                            colSpan={6}
                                             align="center"
                                             sx={{
                                                 py: 4,
                                                 color: 'text.secondary',
                                             }}
                                         >
-                                            No employees yet
+                                            No partners yet
                                         </TableCell>
                                     </TableRow>
                                 )}
-                                {employees.map((e) => {
-                                    const summary =
-                                        employeeSummaries[e.key] || {}
-                                    const balance =
-                                        (summary.toEmployee || 0) -
-                                        (summary.fromEmployee || 0)
+                                {partners.map((p) => {
+                                    const stats = partnerStats[p.key] || {}
                                     return (
-                                        <TableRow key={e.key} hover>
+                                        <TableRow key={p.key} hover>
                                             <TableCell>
                                                 <Typography
                                                     variant="body2"
                                                     fontWeight={500}
                                                 >
-                                                    {e.name}
+                                                    {p.name}
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>
-                                                {e.position || '—'}
+                                                {p.taxId || '—'}
                                             </TableCell>
-                                            <TableCell>
-                                                {partnerMap[e.partnerKey] || '—'}
+                                            <TableCell align="center">
+                                                {stats.invoiceCount || '—'}
+                                            </TableCell>
+                                            <TableCell align="center">
+                                                {stats.expenseCount || '—'}
                                             </TableCell>
                                             <TableCell
                                                 align="right"
-                                                sx={{ color: '#d32f2f' }}
+                                                sx={{ fontWeight: 600 }}
                                             >
-                                                {summary.toEmployee > 0
+                                                {stats.expenseTotal > 0
                                                     ? fmtNum(
-                                                          summary.toEmployee,
+                                                          stats.expenseTotal,
                                                       )
                                                     : '—'}
-                                            </TableCell>
-                                            <TableCell
-                                                align="right"
-                                                sx={{ color: '#2e7d32' }}
-                                            >
-                                                {summary.fromEmployee > 0
-                                                    ? fmtNum(
-                                                          summary.fromEmployee,
-                                                      )
-                                                    : '—'}
-                                            </TableCell>
-                                            <TableCell
-                                                align="right"
-                                                sx={{
-                                                    fontWeight: 600,
-                                                    color:
-                                                        balance > 0
-                                                            ? '#d32f2f'
-                                                            : balance < 0
-                                                              ? '#2e7d32'
-                                                              : undefined,
-                                                }}
-                                            >
-                                                {fmtNum(balance)}
                                             </TableCell>
                                             <TableCell
                                                 align="center"
@@ -404,7 +387,7 @@ export const EmployeeList = () => {
                                                 <IconButton
                                                     size="small"
                                                     onClick={() =>
-                                                        setViewEmployee(e)
+                                                        setViewPartnerKey(p.key)
                                                     }
                                                     title="View"
                                                 >
@@ -413,7 +396,7 @@ export const EmployeeList = () => {
                                                 <IconButton
                                                     size="small"
                                                     onClick={() =>
-                                                        handleEdit(e)
+                                                        handleEdit(p)
                                                     }
                                                     title="Edit"
                                                 >
@@ -422,7 +405,7 @@ export const EmployeeList = () => {
                                                 <IconButton
                                                     size="small"
                                                     onClick={() =>
-                                                        handleDelete(e)
+                                                        handleDelete(p)
                                                     }
                                                     title="Delete"
                                                     sx={{ color: '#d32f2f' }}
@@ -439,11 +422,10 @@ export const EmployeeList = () => {
                 )}
             </Grid>
 
-            <EmployeeDialog
+            <PartnerDialog
                 isOpen={dialogOpen}
                 onClose={() => setDialogOpen(false)}
-                employee={editEmployee}
-                partners={partners}
+                partner={editPartner}
             />
         </Grid>
     )

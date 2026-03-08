@@ -41,7 +41,7 @@ export const InvoiceList = () => {
     const { isAdmin } = useAuth()
     const router = useRouter()
     const [invoices, setInvoices] = useState([])
-    const [receivers, setReceivers] = useState([])
+    const [partners, setPartners] = useState([])
     const [templates, setTemplates] = useState([])
     const [provider, setProvider] = useState(null)
     const [isEditorOpen, setIsEditorOpen] = useState(false)
@@ -59,7 +59,7 @@ export const InvoiceList = () => {
 
     useEffect(() => {
         const unsub1 = poslovanjService.onInvoices(setInvoices)
-        const unsub2 = poslovanjService.onReceivers(setReceivers)
+        const unsub2 = poslovanjService.onPartners(setPartners)
         const unsub3 = poslovanjService.onTemplates(setTemplates)
         const unsub4 = poslovanjService.onProvider(setProvider)
         const unsub5 = poslovanjService.onStatements(setStatements)
@@ -72,8 +72,40 @@ export const InvoiceList = () => {
         }
     }, [])
 
-    const receiverMap = Object.fromEntries(
-        receivers.map((r) => [r.key, r]),
+    const receiverMap = useMemo(() => {
+        const map = {}
+        partners.forEach((p) => {
+            if (p.templateId || p.invoicePrefix || p.defaultCurrency) {
+                const primary =
+                    p.bankAccounts?.find((a) => a.primary) ||
+                    p.bankAccounts?.[0]
+                map[p.key] = {
+                    key: p.key,
+                    name: p.name,
+                    code: p.taxId || '',
+                    address: p.address || '',
+                    phone: p.phone || '',
+                    email: p.email || '',
+                    invoicePrefix: p.invoicePrefix || '',
+                    representative: p.representative || '',
+                    representativeTitle: p.representativeTitle || '',
+                    bankName: p.bankName || '',
+                    accountNo: primary?.account || '',
+                    bankAddress: p.bankAddress || '',
+                    swift: p.swift || '',
+                    correspondentBank: p.correspondentBank || '',
+                    correspondentSwift: p.correspondentSwift || '',
+                    defaultCurrency: p.defaultCurrency || 'EUR',
+                    templateId: p.templateId || '',
+                }
+            }
+        })
+        return map
+    }, [partners])
+
+    const combinedReceivers = useMemo(
+        () => Object.values(receiverMap),
+        [receiverMap],
     )
 
     const getReceiver = (inv) => {
@@ -314,7 +346,7 @@ export const InvoiceList = () => {
         })
 
         return list
-    }, [invoices, filterYear, filterStatus, filterReceiver, filterSearch, sortField, sortDir, receivers])
+    }, [invoices, filterYear, filterStatus, filterReceiver, filterSearch, sortField, sortDir, receiverMap])
 
     if (!isAdmin) return null
 
@@ -381,7 +413,7 @@ export const InvoiceList = () => {
                             onChange={(e) => setFilterReceiver(e.target.value)}
                         >
                             <MenuItem value="">All</MenuItem>
-                            {receivers.map((r) => (
+                            {combinedReceivers.map((r) => (
                                 <MenuItem key={r.key} value={r.key}>
                                     {r.name}
                                 </MenuItem>
@@ -593,7 +625,7 @@ export const InvoiceList = () => {
                 onSave={() => {}}
                 initialData={editingInvoice}
                 mode={editorMode}
-                receivers={receivers}
+                receivers={combinedReceivers}
                 templates={templates}
                 provider={provider}
             />

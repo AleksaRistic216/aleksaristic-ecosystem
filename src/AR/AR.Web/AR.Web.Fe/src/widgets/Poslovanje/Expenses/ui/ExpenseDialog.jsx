@@ -3,6 +3,7 @@ import {
     Autocomplete,
     Box,
     Button,
+    Chip,
     Dialog,
     DialogActions,
     DialogContent,
@@ -64,13 +65,23 @@ const parseSerbianDate = (dateStr) => {
     return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
 }
 
-export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }) => {
+export const ExpenseDialog = ({
+    isOpen,
+    onClose,
+    expense,
+    accounts,
+    statements,
+    partners,
+    defaultPartnerKey,
+}) => {
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
     const [description, setDescription] = useState('')
     const [amount, setAmount] = useState('')
     const [currency, setCurrency] = useState('RSD')
     const [date, setDate] = useState('')
+    const [status, setStatus] = useState('paid')
+    const [partnerKey, setPartnerKey] = useState('')
     const [paymentMethod, setPaymentMethod] = useState('bank_account')
     const [bankAccount, setBankAccount] = useState('')
     const [selectedTransaction, setSelectedTransaction] = useState(null)
@@ -79,6 +90,7 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
     const fileInputRef = useRef(null)
 
     const isEdit = !!expense
+    const partnerList = partners || []
 
     useEffect(() => {
         if (expense) {
@@ -86,11 +98,16 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
             setAmount(expense.amount || '')
             setCurrency(expense.currency || 'RSD')
             setDate(expense.date || '')
+            setStatus(expense.status || 'paid')
+            setPartnerKey(expense.partnerKey || '')
             setPaymentMethod(expense.paymentMethod || 'bank_account')
             setBankAccount(expense.bankAccount || '')
             setSelectedTransaction(
                 expense.transactionRef
-                    ? { id: expense.transactionRef, label: expense.transactionLabel || '' }
+                    ? {
+                          id: expense.transactionRef,
+                          label: expense.transactionLabel || '',
+                      }
                     : null,
             )
         } else {
@@ -98,15 +115,18 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
             setAmount('')
             setCurrency('RSD')
             setDate(new Date().toISOString().slice(0, 10))
+            setStatus('unpaid')
+            setPartnerKey(defaultPartnerKey || '')
             setPaymentMethod('bank_account')
             setBankAccount('')
             setSelectedTransaction(null)
             setPendingFiles([])
         }
-    }, [expense, isOpen])
+    }, [expense, isOpen, defaultPartnerKey])
 
     const transactions = useMemo(() => {
-        if (!bankAccount || paymentMethod === 'cash') return []
+        if (!bankAccount || paymentMethod === 'cash' || status === 'unpaid')
+            return []
         const accountStatements = statements.filter(
             (s) => s.partija === bankAccount,
         )
@@ -134,7 +154,7 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
         })
         items.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         return items
-    }, [bankAccount, paymentMethod, statements])
+    }, [bankAccount, paymentMethod, statements, status])
 
     const handleTransactionSelect = (_, value) => {
         setSelectedTransaction(value)
@@ -164,15 +184,28 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
                 amount: parseFloat(amount),
                 currency,
                 date,
-                paymentMethod,
-                bankAccount: paymentMethod === 'cash' ? '' : bankAccount,
-                transactionRef: selectedTransaction?.id || '',
-                transactionLabel: selectedTransaction?.label || '',
+                status,
+                partnerKey,
+            }
+            if (status !== 'unpaid') {
+                data.paymentMethod = paymentMethod
+                data.bankAccount =
+                    paymentMethod === 'cash' ? '' : bankAccount
+                data.transactionRef = selectedTransaction?.id || ''
+                data.transactionLabel = selectedTransaction?.label || ''
+            } else {
+                data.paymentMethod = ''
+                data.bankAccount = ''
+                data.transactionRef = ''
+                data.transactionLabel = ''
             }
             if (isEdit) {
                 await poslovanjService.updateExpense(expense.key, data)
                 for (const file of pendingFiles) {
-                    await poslovanjService.addExpenseAttachment(expense.key, file)
+                    await poslovanjService.addExpenseAttachment(
+                        expense.key,
+                        file,
+                    )
                 }
             } else {
                 const key = await poslovanjService.createExpense(data)
@@ -246,89 +279,13 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
                 </IconButton>
             </DialogTitle>
             <DialogContent sx={{ pt: 2 }}>
-                <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
-                    <InputLabel>Payment Method</InputLabel>
-                    <Select
-                        value={paymentMethod}
-                        label="Payment Method"
-                        onChange={(e) => {
-                            setPaymentMethod(e.target.value)
-                            setSelectedTransaction(null)
-                        }}
-                    >
-                        {PAYMENT_METHODS.map((m) => (
-                            <MenuItem key={m.value} value={m.value}>
-                                {m.label}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-
-                {paymentMethod !== 'cash' && (
-                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-                        <InputLabel>Bank Account</InputLabel>
-                        <Select
-                            value={bankAccount}
-                            label="Bank Account"
-                            onChange={(e) => {
-                                setBankAccount(e.target.value)
-                                setSelectedTransaction(null)
-                            }}
-                        >
-                            {accounts.map((acc) => (
-                                <MenuItem key={acc.partija} value={acc.partija}>
-                                    {acc.partija} ({acc.valuta})
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                )}
-
-                {paymentMethod !== 'cash' && bankAccount && (
-                    <Autocomplete
-                        options={transactions}
-                        value={selectedTransaction}
-                        onChange={handleTransactionSelect}
-                        getOptionLabel={(opt) => opt.label || ''}
-                        isOptionEqualToValue={(opt, val) => opt.id === val.id}
-                        renderOption={(props, opt) => (
-                            <li {...props} key={opt.id}>
-                                <Box sx={{ width: '100%' }}>
-                                    <Typography variant="body2" noWrap>
-                                        {opt.description}
-                                    </Typography>
-                                    <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        noWrap
-                                    >
-                                        {opt.datumValute} &middot;{' '}
-                                        {fmtNum(opt.amount)} {opt.currency}
-                                        {opt.opis ? ` · ${opt.opis}` : ''}
-                                    </Typography>
-                                </Box>
-                            </li>
-                        )}
-                        renderInput={(params) => (
-                            <TextField
-                                {...params}
-                                label="Statement Transaction"
-                                size="small"
-                                placeholder="Search transactions..."
-                            />
-                        )}
-                        sx={{ mb: 2 }}
-                        noOptionsText="No debit transactions found"
-                    />
-                )}
-
                 <TextField
                     label="Description"
                     fullWidth
                     size="small"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    sx={{ mb: 2 }}
+                    sx={{ mb: 2, mt: 1 }}
                 />
                 <Box
                     sx={{
@@ -375,6 +332,133 @@ export const ExpenseDialog = ({ isOpen, onClose, expense, accounts, statements }
                         sx={{ flex: 1 }}
                     />
                 </Box>
+
+                {partnerList.length > 0 && (
+                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                        <InputLabel>Partner</InputLabel>
+                        <Select
+                            value={partnerKey}
+                            label="Partner"
+                            onChange={(e) => setPartnerKey(e.target.value)}
+                        >
+                            <MenuItem value="">None</MenuItem>
+                            {partnerList.map((p) => (
+                                <MenuItem key={p.key} value={p.key}>
+                                    {p.name}
+                                    {p.taxId ? ` (${p.taxId})` : ''}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                )}
+
+                <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                    <InputLabel>Payment Status</InputLabel>
+                    <Select
+                        value={status}
+                        label="Payment Status"
+                        onChange={(e) => {
+                            setStatus(e.target.value)
+                            if (e.target.value === 'unpaid') {
+                                setSelectedTransaction(null)
+                            }
+                        }}
+                    >
+                        <MenuItem value="unpaid">Unpaid</MenuItem>
+                        <MenuItem value="paid">Paid</MenuItem>
+                    </Select>
+                </FormControl>
+
+                {status !== 'unpaid' && (
+                    <>
+                        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                            <InputLabel>Payment Method</InputLabel>
+                            <Select
+                                value={paymentMethod}
+                                label="Payment Method"
+                                onChange={(e) => {
+                                    setPaymentMethod(e.target.value)
+                                    setSelectedTransaction(null)
+                                }}
+                            >
+                                {PAYMENT_METHODS.map((m) => (
+                                    <MenuItem key={m.value} value={m.value}>
+                                        {m.label}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        {paymentMethod !== 'cash' && (
+                            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                <InputLabel>Bank Account</InputLabel>
+                                <Select
+                                    value={bankAccount}
+                                    label="Bank Account"
+                                    onChange={(e) => {
+                                        setBankAccount(e.target.value)
+                                        setSelectedTransaction(null)
+                                    }}
+                                >
+                                    {accounts.map((acc) => (
+                                        <MenuItem
+                                            key={acc.partija}
+                                            value={acc.partija}
+                                        >
+                                            {acc.partija} ({acc.valuta})
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        )}
+
+                        {paymentMethod !== 'cash' && bankAccount && (
+                            <Autocomplete
+                                options={transactions}
+                                value={selectedTransaction}
+                                onChange={handleTransactionSelect}
+                                getOptionLabel={(opt) => opt.label || ''}
+                                isOptionEqualToValue={(opt, val) =>
+                                    opt.id === val.id
+                                }
+                                renderOption={(props, opt) => (
+                                    <li {...props} key={opt.id}>
+                                        <Box sx={{ width: '100%' }}>
+                                            <Typography
+                                                variant="body2"
+                                                noWrap
+                                            >
+                                                {opt.description}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color="text.secondary"
+                                                noWrap
+                                            >
+                                                {opt.datumValute} &middot;{' '}
+                                                {fmtNum(opt.amount)}{' '}
+                                                {opt.currency}
+                                                {opt.opis
+                                                    ? ` · ${opt.opis}`
+                                                    : ''}
+                                            </Typography>
+                                        </Box>
+                                    </li>
+                                )}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="Statement Transaction"
+                                        size="small"
+                                        placeholder="Search transactions..."
+                                    />
+                                )}
+                                sx={{ mb: 2 }}
+                                noOptionsText="No debit transactions found"
+                            />
+                        )}
+                    </>
+                )}
 
                 <Box
                     sx={{

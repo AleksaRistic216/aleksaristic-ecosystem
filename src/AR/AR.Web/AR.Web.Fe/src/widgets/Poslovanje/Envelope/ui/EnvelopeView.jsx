@@ -66,7 +66,7 @@ export const EnvelopeView = () => {
     const { isAdmin } = useAuth()
     const router = useRouter()
     const [invoices, setInvoices] = useState([])
-    const [receivers, setReceivers] = useState([])
+    const [partners, setPartners] = useState([])
     const [statements, setStatements] = useState([])
     const [emailSettings, setEmailSettings] = useState(null)
     const [envelope, setEnvelope] = useState([])
@@ -91,7 +91,7 @@ export const EnvelopeView = () => {
 
     useEffect(() => {
         const unsub1 = poslovanjService.onInvoices(setInvoices)
-        const unsub2 = poslovanjService.onReceivers(setReceivers)
+        const unsub2 = poslovanjService.onPartners(setPartners)
         const unsub3 = poslovanjService.onEmailSettings(setEmailSettings)
         const unsub4 = poslovanjService.onStatements(setStatements)
         return () => {
@@ -102,9 +102,19 @@ export const EnvelopeView = () => {
         }
     }, [])
 
-    const receiverMap = Object.fromEntries(
-        receivers.map((r) => [r.key, r]),
-    )
+    const receiverMap = useMemo(() => {
+        const map = {}
+        partners.forEach((p) => {
+            if (p.templateId || p.invoicePrefix || p.defaultCurrency) {
+                map[p.key] = {
+                    key: p.key,
+                    name: p.name,
+                    invoicePrefix: p.invoicePrefix || '',
+                }
+            }
+        })
+        return map
+    }, [partners])
 
     const invoicesWithAttachments = useMemo(() => {
         const from = filterDateFrom ? new Date(filterDateFrom) : null
@@ -140,7 +150,7 @@ export const EnvelopeView = () => {
                     '',
             }))
             .filter((inv) => inv.parsedAttachments.length > 0)
-    }, [invoices, receivers, filterType, filterDateFrom, filterDateTo])
+    }, [invoices, receiverMap, filterType, filterDateFrom, filterDateTo])
 
     const filteredStatements = useMemo(() => {
         if (filterType !== 'all' && filterType !== 'statement') return []

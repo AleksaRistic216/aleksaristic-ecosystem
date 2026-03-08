@@ -7,8 +7,11 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControl,
     IconButton,
     InputLabel,
+    MenuItem,
+    Select,
     TextField,
     Typography,
     useMediaQuery,
@@ -28,7 +31,7 @@ const migrateBankAccounts = (employee) => {
     return []
 }
 
-export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
+export const EmployeeDialog = ({ isOpen, onClose, employee, partners = [] }) => {
     const theme = useTheme()
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
     const [name, setName] = useState('')
@@ -37,6 +40,7 @@ export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
     const [newAccount, setNewAccount] = useState('')
     const [email, setEmail] = useState('')
     const [phone, setPhone] = useState('')
+    const [partnerKey, setPartnerKey] = useState('')
     const [saving, setSaving] = useState(false)
 
     const isEdit = !!employee
@@ -48,12 +52,14 @@ export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
             setBankAccounts(migrateBankAccounts(employee))
             setEmail(employee.email || '')
             setPhone(employee.phone || '')
+            setPartnerKey(employee.partnerKey || '')
         } else {
             setName('')
             setPosition('')
             setBankAccounts([])
             setEmail('')
             setPhone('')
+            setPartnerKey('')
         }
         setNewAccount('')
     }, [employee, isOpen])
@@ -93,6 +99,10 @@ export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
             toast('Name is required', { type: 'warning' })
             return
         }
+        if (!partnerKey) {
+            toast('Partner is required', { type: 'warning' })
+            return
+        }
         setSaving(true)
         try {
             const primary = bankAccounts.find((a) => a.primary)
@@ -103,6 +113,7 @@ export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
                 bankAccounts,
                 email: email.trim(),
                 phone: phone.trim(),
+                partnerKey: partnerKey || '',
             }
             if (isEdit) {
                 await poslovanjService.updateEmployee(employee.key, data)
@@ -159,6 +170,22 @@ export const EmployeeDialog = ({ isOpen, onClose, employee }) => {
                     onChange={(e) => setPosition(e.target.value)}
                     sx={{ mb: 2 }}
                 />
+                <FormControl fullWidth size="small" sx={{ mb: 2 }} required>
+                    <InputLabel>Partner</InputLabel>
+                    <Select
+                        value={partnerKey}
+                        label="Partner"
+                        onChange={(e) =>
+                            setPartnerKey(e.target.value)
+                        }
+                    >
+                        {partners.map((p) => (
+                            <MenuItem key={p.key} value={p.key}>
+                                {p.name}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
 
                 <InputLabel sx={{ fontSize: '0.85rem', mb: 0.5 }}>
                     Bank Accounts

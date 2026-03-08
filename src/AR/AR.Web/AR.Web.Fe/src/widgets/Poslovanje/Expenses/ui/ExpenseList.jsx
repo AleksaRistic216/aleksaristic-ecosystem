@@ -25,6 +25,7 @@ import {
     Add,
     ArrowBack,
     AttachFile,
+    ContentCopy,
     Delete,
     Edit,
 } from '@mui/icons-material'
@@ -58,25 +59,40 @@ export const ExpenseList = () => {
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
     const [expenses, setExpenses] = useState([])
     const [statements, setStatements] = useState([])
+    const [partners, setPartners] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editExpense, setEditExpense] = useState(null)
     const [filterMethod, setFilterMethod] = useState('')
     const [filterAccount, setFilterAccount] = useState('')
+    const [filterStatus, setFilterStatus] = useState('')
 
     useEffect(() => {
         const unsub1 = poslovanjService.onExpenses(setExpenses)
         const unsub2 = poslovanjService.onStatements(setStatements)
+        const unsub3 = poslovanjService.onPartners(setPartners)
         return () => {
             unsub1()
             unsub2()
+            unsub3()
         }
     }, [])
+
+    const partnerMap = useMemo(() => {
+        const map = {}
+        partners.forEach((p) => {
+            map[p.key] = p.name
+        })
+        return map
+    }, [partners])
 
     const accounts = useMemo(() => {
         const map = {}
         statements.forEach((s) => {
             if (!map[s.partija]) {
-                map[s.partija] = { partija: s.partija, valuta: s.valuta || 'RSD' }
+                map[s.partija] = {
+                    partija: s.partija,
+                    valuta: s.valuta || 'RSD',
+                }
             }
         })
         return Object.values(map).sort((a, b) =>
@@ -92,9 +108,16 @@ export const ExpenseList = () => {
         if (filterAccount) {
             list = list.filter((e) => e.bankAccount === filterAccount)
         }
+        if (filterStatus) {
+            list = list.filter((e) =>
+                filterStatus === 'unpaid'
+                    ? e.status === 'unpaid'
+                    : e.status !== 'unpaid',
+            )
+        }
         list.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         return list
-    }, [expenses, filterMethod, filterAccount])
+    }, [expenses, filterMethod, filterAccount, filterStatus])
 
     const totals = useMemo(() => {
         const byCurrency = {}
@@ -106,7 +129,11 @@ export const ExpenseList = () => {
     }, [filtered])
 
     const handleDelete = async (expense) => {
-        if (!confirm(`Delete expense "${expense.description || 'Untitled'}"?`))
+        if (
+            !confirm(
+                `Delete expense "${expense.description || 'Untitled'}"?`,
+            )
+        )
             return
         try {
             await poslovanjService.deleteExpense(expense.key)
@@ -126,10 +153,32 @@ export const ExpenseList = () => {
         setDialogOpen(true)
     }
 
+    const handleClone = async (expense) => {
+        const { key, createdAt, updatedAt, attachments, ...data } = expense
+        try {
+            await poslovanjService.createExpense({
+                ...data,
+                status: 'unpaid',
+                paymentMethod: '',
+                bankAccount: '',
+                transactionRef: '',
+                transactionLabel: '',
+            })
+            toast('Expense cloned', { type: 'success' })
+        } catch (error) {
+            toast('Failed to clone', { type: 'error' })
+        }
+    }
+
     if (!isAdmin) return null
 
     return (
-        <Grid container justifyContent="center" py={isMobile ? 2 : 4} px={isMobile ? 1 : 2}>
+        <Grid
+            container
+            justifyContent="center"
+            py={isMobile ? 2 : 4}
+            px={isMobile ? 1 : 2}
+        >
             <Grid item xs={12} md={10} lg={8}>
                 <Box
                     sx={{
@@ -181,7 +230,28 @@ export const ExpenseList = () => {
                 >
                     <FormControl
                         size="small"
-                        sx={{ minWidth: isMobile ? 120 : 160, flex: isMobile ? '1 1 45%' : undefined }}
+                        sx={{
+                            minWidth: isMobile ? 100 : 120,
+                            flex: isMobile ? '1 1 30%' : undefined,
+                        }}
+                    >
+                        <InputLabel>Status</InputLabel>
+                        <Select
+                            value={filterStatus}
+                            label="Status"
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                        >
+                            <MenuItem value="">All</MenuItem>
+                            <MenuItem value="paid">Paid</MenuItem>
+                            <MenuItem value="unpaid">Unpaid</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <FormControl
+                        size="small"
+                        sx={{
+                            minWidth: isMobile ? 100 : 140,
+                            flex: isMobile ? '1 1 30%' : undefined,
+                        }}
                     >
                         <InputLabel>Payment</InputLabel>
                         <Select
@@ -189,15 +259,20 @@ export const ExpenseList = () => {
                             label="Payment"
                             onChange={(e) => setFilterMethod(e.target.value)}
                         >
-                            <MenuItem value="">All Methods</MenuItem>
-                            <MenuItem value="bank_account">Bank Account</MenuItem>
+                            <MenuItem value="">All</MenuItem>
+                            <MenuItem value="bank_account">
+                                Bank Account
+                            </MenuItem>
                             <MenuItem value="card">Card</MenuItem>
                             <MenuItem value="cash">Cash</MenuItem>
                         </Select>
                     </FormControl>
                     <FormControl
                         size="small"
-                        sx={{ minWidth: isMobile ? 120 : 250, flex: isMobile ? '1 1 45%' : undefined }}
+                        sx={{
+                            minWidth: isMobile ? 100 : 200,
+                            flex: isMobile ? '1 1 30%' : undefined,
+                        }}
                     >
                         <InputLabel>Account</InputLabel>
                         <Select
@@ -205,9 +280,12 @@ export const ExpenseList = () => {
                             label="Account"
                             onChange={(e) => setFilterAccount(e.target.value)}
                         >
-                            <MenuItem value="">All Accounts</MenuItem>
+                            <MenuItem value="">All</MenuItem>
                             {accounts.map((acc) => (
-                                <MenuItem key={acc.partija} value={acc.partija}>
+                                <MenuItem
+                                    key={acc.partija}
+                                    value={acc.partija}
+                                >
                                     {acc.partija} ({acc.valuta})
                                 </MenuItem>
                             ))}
@@ -276,6 +354,10 @@ export const ExpenseList = () => {
                                             color="text.secondary"
                                         >
                                             {e.date}
+                                            {e.partnerKey &&
+                                            partnerMap[e.partnerKey]
+                                                ? ` · ${partnerMap[e.partnerKey]}`
+                                                : ''}
                                         </Typography>
                                     </Box>
                                     <Typography
@@ -283,7 +365,8 @@ export const ExpenseList = () => {
                                         fontWeight={700}
                                         sx={{ whiteSpace: 'nowrap', ml: 1 }}
                                     >
-                                        {fmtNum(e.amount)} {e.currency || 'RSD'}
+                                        {fmtNum(e.amount)}{' '}
+                                        {e.currency || 'RSD'}
                                     </Typography>
                                 </Box>
                                 <Box
@@ -294,23 +377,37 @@ export const ExpenseList = () => {
                                         mt: 1,
                                     }}
                                 >
-                                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <Box
+                                        sx={{
+                                            display: 'flex',
+                                            gap: 0.5,
+                                            flexWrap: 'wrap',
+                                            alignItems: 'center',
+                                        }}
+                                    >
                                         <Chip
                                             label={
-                                                PAYMENT_LABELS[e.paymentMethod] ||
-                                                e.paymentMethod
+                                                e.status === 'unpaid'
+                                                    ? 'Unpaid'
+                                                    : PAYMENT_LABELS[
+                                                          e.paymentMethod
+                                                      ] ||
+                                                      e.paymentMethod ||
+                                                      'Paid'
                                             }
                                             size="small"
                                             variant="outlined"
+                                            sx={{
+                                                borderColor:
+                                                    e.status === 'unpaid'
+                                                        ? '#ed6c02'
+                                                        : undefined,
+                                                color:
+                                                    e.status === 'unpaid'
+                                                        ? '#ed6c02'
+                                                        : undefined,
+                                            }}
                                         />
-                                        {e.bankAccount && (
-                                            <Chip
-                                                label={e.bankAccount.slice(-6)}
-                                                size="small"
-                                                variant="outlined"
-                                                title={e.bankAccount}
-                                            />
-                                        )}
                                         {normalizeAttachments(e.attachments)
                                             .length > 0 && (
                                             <AttachFile
@@ -322,6 +419,12 @@ export const ExpenseList = () => {
                                         )}
                                     </Box>
                                     <Box>
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => handleClone(e)}
+                                        >
+                                            <ContentCopy fontSize="small" />
+                                        </IconButton>
                                         <IconButton
                                             size="small"
                                             onClick={() => handleEdit(e)}
@@ -351,14 +454,14 @@ export const ExpenseList = () => {
                                     <TableCell>
                                         <strong>Description</strong>
                                     </TableCell>
+                                    <TableCell>
+                                        <strong>Partner</strong>
+                                    </TableCell>
                                     <TableCell align="right">
                                         <strong>Amount</strong>
                                     </TableCell>
                                     <TableCell>
-                                        <strong>Payment</strong>
-                                    </TableCell>
-                                    <TableCell>
-                                        <strong>Account</strong>
+                                        <strong>Status</strong>
                                     </TableCell>
                                     <TableCell align="center">
                                         <strong>Actions</strong>
@@ -386,42 +489,55 @@ export const ExpenseList = () => {
                                         <TableCell>
                                             {e.description || '—'}
                                         </TableCell>
+                                        <TableCell>
+                                            {partnerMap[e.partnerKey] || '—'}
+                                        </TableCell>
                                         <TableCell
                                             align="right"
                                             sx={{ fontWeight: 600 }}
                                         >
-                                            {fmtNum(e.amount)} {e.currency || 'RSD'}
+                                            {fmtNum(e.amount)}{' '}
+                                            {e.currency || 'RSD'}
                                         </TableCell>
                                         <TableCell>
                                             <Chip
                                                 label={
-                                                    PAYMENT_LABELS[
-                                                        e.paymentMethod
-                                                    ] || e.paymentMethod
+                                                    e.status === 'unpaid'
+                                                        ? 'Unpaid'
+                                                        : 'Paid'
                                                 }
                                                 size="small"
                                                 variant="outlined"
+                                                sx={{
+                                                    borderColor:
+                                                        e.status === 'unpaid'
+                                                            ? '#ed6c02'
+                                                            : '#2e7d32',
+                                                    color:
+                                                        e.status === 'unpaid'
+                                                            ? '#ed6c02'
+                                                            : '#2e7d32',
+                                                }}
                                             />
                                         </TableCell>
-                                        <TableCell>
-                                            {e.bankAccount ? (
-                                                <Chip
-                                                    label={e.bankAccount}
-                                                    size="small"
-                                                    variant="outlined"
-                                                />
-                                            ) : (
-                                                '—'
-                                            )}
-                                        </TableCell>
-                                        <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                                            {normalizeAttachments(e.attachments)
-                                                .length > 0 && (
+                                        <TableCell
+                                            align="center"
+                                            sx={{ whiteSpace: 'nowrap' }}
+                                        >
+                                            {normalizeAttachments(
+                                                e.attachments,
+                                            ).length > 0 && (
                                                 <IconButton
                                                     size="small"
                                                     onClick={() => {
-                                                        const atts = normalizeAttachments(e.attachments)
-                                                        window.open(atts[0].data, '_blank')
+                                                        const atts =
+                                                            normalizeAttachments(
+                                                                e.attachments,
+                                                            )
+                                                        window.open(
+                                                            atts[0].data,
+                                                            '_blank',
+                                                        )
                                                     }}
                                                     title="View attachment"
                                                     sx={{ color: '#2e7d32' }}
@@ -429,6 +545,13 @@ export const ExpenseList = () => {
                                                     <AttachFile fontSize="small" />
                                                 </IconButton>
                                             )}
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleClone(e)}
+                                                title="Clone"
+                                            >
+                                                <ContentCopy fontSize="small" />
+                                            </IconButton>
                                             <IconButton
                                                 size="small"
                                                 onClick={() => handleEdit(e)}
@@ -459,6 +582,7 @@ export const ExpenseList = () => {
                 expense={editExpense}
                 accounts={accounts}
                 statements={statements}
+                partners={partners}
             />
         </Grid>
     )
