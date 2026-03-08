@@ -22,11 +22,12 @@ import {
     TextField,
     Typography,
 } from '@mui/material'
-import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo } from '@mui/icons-material'
+import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo, AttachFile } from '@mui/icons-material'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
 import { InvoiceEditorModal } from '../../InvoiceEditor/ui/InvoiceEditorModal'
+import { AttachmentsDialog } from '../../Attachments/ui/AttachmentsDialog'
 
 const statusStyles = {
     draft: {},
@@ -49,6 +50,7 @@ export const InvoiceList = () => {
     const [filterSearch, setFilterSearch] = useState('')
     const [sortField, setSortField] = useState('createdAt')
     const [sortDir, setSortDir] = useState('desc')
+    const [attachmentsInvoice, setAttachmentsInvoice] = useState(null)
 
     useEffect(() => {
         const unsub1 = poslovanjService.onInvoices(setInvoices)
@@ -467,6 +469,16 @@ export const InvoiceList = () => {
                                         >
                                             <Print fontSize="small" />
                                         </IconButton>
+                                        {(inv.status === 'sent' || inv.status === 'paid') && (
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => setAttachmentsInvoice(inv)}
+                                                title="Attachments"
+                                                sx={inv.attachments ? { color: '#2e7d32' } : {}}
+                                            >
+                                                <AttachFile fontSize="small" />
+                                            </IconButton>
+                                        )}
                                         {(!inv.status || inv.status === 'draft') && (
                                             <IconButton
                                                 size="small"
@@ -484,6 +496,14 @@ export const InvoiceList = () => {
                     </Table>
                 </TableContainer>
             </Grid>
+
+            <AttachmentsDialog
+                isOpen={!!attachmentsInvoice}
+                onClose={() => setAttachmentsInvoice(null)}
+                invoice={attachmentsInvoice
+                    ? invoices.find((i) => i.key === attachmentsInvoice.key) || attachmentsInvoice
+                    : null}
+            />
 
             <InvoiceEditorModal
                 isOpen={isEditorOpen}

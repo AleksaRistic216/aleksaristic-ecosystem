@@ -41,6 +41,41 @@ export const poslovanjService = {
         await remove(ref(db, `/poslovanje-invoices/${key}`))
     },
 
+    async addAttachment(invoiceKey, file) {
+        const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+        })
+        const newRef = push(
+            ref(db, `/poslovanje-invoices/${invoiceKey}/attachments`),
+        )
+        const doc = {
+            data,
+            name: file.name,
+            type: file.type,
+            uploadedAt: Date.now(),
+        }
+        await set(newRef, doc)
+        await update(ref(db, `/poslovanje-invoices/${invoiceKey}`), {
+            updatedAt: Date.now(),
+        })
+        return { key: newRef.key, ...doc }
+    },
+
+    async removeAttachment(invoiceKey, attachmentKey) {
+        await remove(
+            ref(
+                db,
+                `/poslovanje-invoices/${invoiceKey}/attachments/${attachmentKey}`,
+            ),
+        )
+        await update(ref(db, `/poslovanje-invoices/${invoiceKey}`), {
+            updatedAt: Date.now(),
+        })
+    },
+
     // Receivers
     onReceivers(callback) {
         return onValue(ref(db, '/poslovanje-receivers'), (snapshot) => {

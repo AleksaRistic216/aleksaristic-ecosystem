@@ -439,6 +439,7 @@ export const InvoiceEditorModal = ({
                             size="small"
                         />
                     </Grid>
+
                 </Grid>
             </DialogContent>
             <DialogActions
