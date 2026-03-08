@@ -1,4 +1,4 @@
-import { Grid } from "@mui/material"
+import { Box, Grid } from "@mui/material"
 import { NavigationMenu } from "@/widgets/NavigationMenu"
 
 export const Layout = (props) => {
@@ -8,10 +8,13 @@ export const Layout = (props) => {
             direction={`column`}
             sx={{
                 height: `100vh`,
-                width: `100vw`
+                width: `100vw`,
+                flexWrap: 'nowrap',
             }}>
                 <NavigationMenu></NavigationMenu>
-                {props.children}
+                <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                    {props.children}
+                </Box>
         </Grid>
     )
 }

@@ -160,4 +160,25 @@ export const poslovanjService = {
     async updateEmailSettings(settings) {
         await set(ref(db, '/poslovanje-email-settings'), settings)
     },
+
+    // Bank statements
+    onStatements(callback) {
+        return onValue(ref(db, '/poslovanje-statements'), (snapshot) => {
+            if (!snapshot.exists()) return callback([])
+            const data = snapshot.val()
+            callback(
+                Object.entries(data).map(([key, val]) => ({ key, ...val })),
+            )
+        })
+    },
+
+    async createStatement(statement) {
+        const newRef = push(ref(db, '/poslovanje-statements'))
+        await set(newRef, { ...statement, importedAt: Date.now() })
+        return newRef.key
+    },
+
+    async deleteStatement(key) {
+        await remove(ref(db, `/poslovanje-statements/${key}`))
+    },
 }
