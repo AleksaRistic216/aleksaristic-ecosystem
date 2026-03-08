@@ -5,13 +5,9 @@ import {
     Box,
     Button,
     Chip,
-    FormControl,
     Grid,
     IconButton,
-    InputLabel,
-    MenuItem,
     Paper,
-    Select,
     Table,
     TableBody,
     TableCell,
@@ -22,6 +18,7 @@ import {
     LinearProgress,
 } from '@mui/material'
 import {
+    AccountBalance,
     Add,
     ArrowBack,
     Delete,
@@ -42,18 +39,92 @@ export const StatementList = () => {
     const { isAdmin } = useAuth()
     const router = useRouter()
     const [statements, setStatements] = useState([])
+    const [expenses, setExpenses] = useState([])
+    const [invoices, setInvoices] = useState([])
     const [filterAccount, setFilterAccount] = useState('')
     const [previewStatement, setPreviewStatement] = useState(null)
     const [importing, setImporting] = useState(false)
     const fileInputRef = useRef(null)
 
     useEffect(() => {
-        return poslovanjService.onStatements(setStatements)
+        const unsub1 = poslovanjService.onStatements(setStatements)
+        const unsub2 = poslovanjService.onExpenses(setExpenses)
+        const unsub3 = poslovanjService.onInvoices(setInvoices)
+        return () => {
+            unsub1()
+            unsub2()
+            unsub3()
+        }
     }, [])
 
-    const accounts = useMemo(() => {
-        const set = new Set(statements.map((s) => s.partija))
-        return Array.from(set).sort()
+    const linkedByExpenses = useMemo(() => {
+        const set = new Set()
+        expenses.forEach((e) => {
+            if (e.transactionRef) set.add(e.transactionRef)
+        })
+        return set
+    }, [expenses])
+
+    const linkedByInvoices = useMemo(() => {
+        const set = new Set()
+        invoices.forEach((inv) => {
+            if (inv.linkedStatement) {
+                const { statementKey, stavkaIndex } = inv.linkedStatement
+                if (statementKey != null && stavkaIndex != null) {
+                    set.add(`${statementKey}::${stavkaIndex}`)
+                }
+            }
+        })
+        return set
+    }, [invoices])
+
+    const statementStatus = useMemo(() => {
+        const map = {}
+        statements.forEach((s) => {
+            const stavke = s.stavke
+                ? Array.isArray(s.stavke)
+                    ? s.stavke
+                    : Object.values(s.stavke)
+                : []
+            if (stavke.length === 0) {
+                map[s.key] = 'none'
+                return
+            }
+            const allLinked = stavke.every((t, i) => {
+                const id = `${s.key}::${i}`
+                if (t.duguje > 0) return linkedByExpenses.has(id)
+                if (t.potrazuje > 0) return linkedByInvoices.has(id)
+                return true
+            })
+            map[s.key] = allLinked ? 'complete' : 'partial'
+        })
+        return map
+    }, [statements, linkedByExpenses, linkedByInvoices])
+
+    const accountSummaries = useMemo(() => {
+        const map = {}
+        for (const s of statements) {
+            const dateKey = s.datumIzvoda.split('.').reverse().join('')
+            const prev = map[s.partija]
+            if (
+                !prev ||
+                dateKey > prev._dateKey ||
+                (dateKey === prev._dateKey &&
+                    Number(s.brojIzvoda) > Number(prev.brojIzvoda))
+            ) {
+                map[s.partija] = {
+                    partija: s.partija,
+                    novoStanje: s.novoStanje,
+                    datumIzvoda: s.datumIzvoda,
+                    valuta: s.valuta,
+                    brojIzvoda: s.brojIzvoda,
+                    _dateKey: dateKey,
+                }
+            }
+        }
+        return Object.values(map).sort((a, b) =>
+            a.partija.localeCompare(b.partija),
+        )
     }, [statements])
 
     const filtered = useMemo(() => {
@@ -207,32 +278,85 @@ export const StatementList = () => {
                     </Box>
                 </Box>
 
-                <Box
-                    sx={{
-                        display: 'flex',
-                        gap: 2,
-                        mb: 2,
-                        flexWrap: 'wrap',
-                    }}
-                >
-                    <FormControl size="small" sx={{ minWidth: 250 }}>
-                        <InputLabel>Account</InputLabel>
-                        <Select
-                            value={filterAccount}
-                            label="Account"
-                            onChange={(e) =>
-                                setFilterAccount(e.target.value)
-                            }
-                        >
-                            <MenuItem value="">All Accounts</MenuItem>
-                            {accounts.map((acc) => (
-                                <MenuItem key={acc} value={acc}>
-                                    {acc}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </Box>
+                {accountSummaries.length > 1 && (
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            gap: 2,
+                            mb: 3,
+                            flexWrap: 'wrap',
+                        }}
+                    >
+                        {accountSummaries.map((acc) => (
+                            <Paper
+                                key={acc.partija}
+                                variant="outlined"
+                                sx={{
+                                    p: 2,
+                                    minWidth: 220,
+                                    flex: '1 1 220px',
+                                    cursor: 'pointer',
+                                    border:
+                                        filterAccount === acc.partija
+                                            ? '2px solid'
+                                            : undefined,
+                                    borderColor:
+                                        filterAccount === acc.partija
+                                            ? 'primary.main'
+                                            : undefined,
+                                    '&:hover': {
+                                        bgcolor: 'grey.50',
+                                    },
+                                }}
+                                onClick={() =>
+                                    setFilterAccount(
+                                        filterAccount === acc.partija
+                                            ? ''
+                                            : acc.partija,
+                                    )
+                                }
+                            >
+                                <Box
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        mb: 1,
+                                    }}
+                                >
+                                    <AccountBalance
+                                        fontSize="small"
+                                        color="action"
+                                    />
+                                    <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                    >
+                                        {acc.partija}
+                                    </Typography>
+                                </Box>
+                                <Typography
+                                    variant="h6"
+                                    fontWeight={700}
+                                    sx={{
+                                        color:
+                                            acc.novoStanje >= 0
+                                                ? '#2e7d32'
+                                                : '#d32f2f',
+                                    }}
+                                >
+                                    {fmtNum(acc.novoStanje)} {acc.valuta}
+                                </Typography>
+                                <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                >
+                                    Last statement: {acc.datumIzvoda} (#{acc.brojIzvoda})
+                                </Typography>
+                            </Paper>
+                        ))}
+                    </Box>
+                )}
 
                 {importing && <LinearProgress sx={{ mb: 1 }} />}
 
@@ -282,7 +406,18 @@ export const StatementList = () => {
                                 </TableRow>
                             )}
                             {filtered.map((s) => (
-                                <TableRow key={s.key} hover>
+                                <TableRow
+                                    key={s.key}
+                                    hover
+                                    sx={{
+                                        bgcolor:
+                                            statementStatus[s.key] === 'complete'
+                                                ? 'rgba(46, 125, 50, 0.15)'
+                                                : statementStatus[s.key] === 'partial'
+                                                    ? 'rgba(237, 108, 2, 0.12)'
+                                                    : undefined,
+                                    }}
+                                >
                                     <TableCell>{s.brojIzvoda}</TableCell>
                                     <TableCell>{s.datumIzvoda}</TableCell>
                                     <TableCell>
@@ -362,6 +497,8 @@ export const StatementList = () => {
                 isOpen={!!previewStatement}
                 onClose={() => setPreviewStatement(null)}
                 statement={previewStatement}
+                linkedByExpenses={linkedByExpenses}
+                linkedByInvoices={linkedByInvoices}
             />
         </Grid>
     )

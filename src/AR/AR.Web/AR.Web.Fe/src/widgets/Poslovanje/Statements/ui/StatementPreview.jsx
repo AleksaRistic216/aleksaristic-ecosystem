@@ -39,10 +39,17 @@ const normalizeStavke = (stavke) => {
     return Object.values(stavke)
 }
 
-export const StatementPreview = ({ isOpen, onClose, statement }) => {
+export const StatementPreview = ({ isOpen, onClose, statement, linkedByExpenses, linkedByInvoices }) => {
     if (!statement) return null
 
     const stavke = normalizeStavke(statement.stavke)
+
+    const isLinked = (s, i) => {
+        const id = `${statement.key}::${i}`
+        if (s.duguje > 0) return linkedByExpenses?.has(id)
+        if (s.potrazuje > 0) return linkedByInvoices?.has(id)
+        return true
+    }
 
     return (
         <Dialog
@@ -177,7 +184,15 @@ export const StatementPreview = ({ isOpen, onClose, statement }) => {
                         </TableHead>
                         <TableBody>
                             {stavke.map((s, i) => (
-                                <TableRow key={i} hover>
+                                <TableRow
+                                    key={i}
+                                    hover
+                                    sx={{
+                                        bgcolor: isLinked(s, i)
+                                            ? 'rgba(46, 125, 50, 0.15)'
+                                            : 'rgba(237, 108, 2, 0.12)',
+                                    }}
+                                >
                                     <TableCell>
                                         <Typography
                                             variant="body2"

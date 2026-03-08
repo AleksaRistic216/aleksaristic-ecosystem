@@ -20,14 +20,16 @@ import {
     TableRow,
     TableSortLabel,
     TextField,
+    Tooltip,
     Typography,
 } from '@mui/material'
-import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo, AttachFile } from '@mui/icons-material'
+import { Add, Edit, Delete, Print, ArrowBack, ContentCopy, Undo, AttachFile, Link as LinkIcon } from '@mui/icons-material'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { toast } from 'react-toastify'
 import { InvoiceEditorModal } from '../../InvoiceEditor/ui/InvoiceEditorModal'
 import { AttachmentsDialog } from '../../Attachments/ui/AttachmentsDialog'
+import { StatementLinkDialog } from './StatementLinkDialog'
 
 const statusStyles = {
     draft: {},
@@ -51,17 +53,21 @@ export const InvoiceList = () => {
     const [sortField, setSortField] = useState('createdAt')
     const [sortDir, setSortDir] = useState('desc')
     const [attachmentsInvoice, setAttachmentsInvoice] = useState(null)
+    const [statements, setStatements] = useState([])
+    const [linkInvoice, setLinkInvoice] = useState(null)
 
     useEffect(() => {
         const unsub1 = poslovanjService.onInvoices(setInvoices)
         const unsub2 = poslovanjService.onReceivers(setReceivers)
         const unsub3 = poslovanjService.onTemplates(setTemplates)
         const unsub4 = poslovanjService.onProvider(setProvider)
+        const unsub5 = poslovanjService.onStatements(setStatements)
         return () => {
             unsub1()
             unsub2()
             unsub3()
             unsub4()
+            unsub5()
         }
     }, [])
 
@@ -479,6 +485,24 @@ export const InvoiceList = () => {
                                                 <AttachFile fontSize="small" />
                                             </IconButton>
                                         )}
+                                        {(inv.status === 'sent' || inv.status === 'paid') && (
+                                            <Tooltip
+                                                title={
+                                                    inv.linkedStatement
+                                                        ? `Linked: Statement #${inv.linkedStatement.brojIzvoda} (${inv.linkedStatement.datumIzvoda})`
+                                                        : 'Link to bank statement'
+                                                }
+                                                arrow
+                                            >
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => setLinkInvoice(inv)}
+                                                    sx={inv.linkedStatement ? { color: '#2e7d32' } : {}}
+                                                >
+                                                    <LinkIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
                                         {(!inv.status || inv.status === 'draft') && (
                                             <IconButton
                                                 size="small"
@@ -514,6 +538,15 @@ export const InvoiceList = () => {
                 receivers={receivers}
                 templates={templates}
                 provider={provider}
+            />
+
+            <StatementLinkDialog
+                isOpen={!!linkInvoice}
+                onClose={() => setLinkInvoice(null)}
+                invoice={linkInvoice
+                    ? invoices.find((i) => i.key === linkInvoice.key) || linkInvoice
+                    : null}
+                statements={statements}
             />
         </Grid>
     )

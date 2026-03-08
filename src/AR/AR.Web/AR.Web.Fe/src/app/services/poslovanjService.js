@@ -41,6 +41,20 @@ export const poslovanjService = {
         await remove(ref(db, `/poslovanje-invoices/${key}`))
     },
 
+    async linkInvoiceToStatement(invoiceKey, link) {
+        await update(ref(db, `/poslovanje-invoices/${invoiceKey}`), {
+            linkedStatement: link,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async unlinkInvoiceFromStatement(invoiceKey) {
+        await update(ref(db, `/poslovanje-invoices/${invoiceKey}`), {
+            linkedStatement: null,
+            updatedAt: Date.now(),
+        })
+    },
+
     async addAttachment(invoiceKey, file) {
         const data = await new Promise((resolve, reject) => {
             const reader = new FileReader()
@@ -187,5 +201,62 @@ export const poslovanjService = {
 
     async deleteStatement(key) {
         await remove(ref(db, `/poslovanje-statements/${key}`))
+    },
+
+    // Expenses
+    onExpenses(callback) {
+        return onValue(ref(db, '/poslovanje-expenses'), (snapshot) => {
+            if (!snapshot.exists()) return callback([])
+            const data = snapshot.val()
+            callback(
+                Object.entries(data).map(([key, val]) => ({ key, ...val })),
+            )
+        })
+    },
+
+    async createExpense(expense) {
+        const newRef = push(ref(db, '/poslovanje-expenses'))
+        await set(newRef, { ...expense, createdAt: Date.now() })
+        return newRef.key
+    },
+
+    async updateExpense(key, expense) {
+        await update(ref(db, `/poslovanje-expenses/${key}`), {
+            ...expense,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async deleteExpense(key) {
+        await remove(ref(db, `/poslovanje-expenses/${key}`))
+    },
+
+    async addExpenseAttachment(expenseKey, file) {
+        const data = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+        })
+        const newRef = push(
+            ref(db, `/poslovanje-expenses/${expenseKey}/attachments`),
+        )
+        const doc = {
+            data,
+            name: file.name,
+            type: file.type,
+            uploadedAt: Date.now(),
+        }
+        await set(newRef, doc)
+        return { key: newRef.key, ...doc }
+    },
+
+    async removeExpenseAttachment(expenseKey, attachmentKey) {
+        await remove(
+            ref(
+                db,
+                `/poslovanje-expenses/${expenseKey}/attachments/${attachmentKey}`,
+            ),
+        )
     },
 }
