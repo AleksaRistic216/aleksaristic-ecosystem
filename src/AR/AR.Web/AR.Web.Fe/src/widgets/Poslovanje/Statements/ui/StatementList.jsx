@@ -93,21 +93,24 @@ export const StatementList = () => {
 
     const linkedByExpenses = useMemo(() => {
         const map = new Map()
-        expenses.forEach((e) => {
-            if (e.transactionRef) {
-                map.set(e.transactionRef, {
-                    partnerName: partnerMap[e.partnerKey] || '',
-                    type: 'expense',
-                })
+        const addRefs = (item, info) => {
+            if (item.transactionRefs && typeof item.transactionRefs === 'object') {
+                Object.keys(item.transactionRefs).forEach((r) => map.set(r, info))
+            } else if (item.transactionRef) {
+                map.set(item.transactionRef, info)
             }
+        }
+        expenses.forEach((e) => {
+            addRefs(e, {
+                partnerName: partnerMap[e.partnerKey] || '',
+                type: 'expense',
+            })
         })
         governmentExpenses.forEach((e) => {
-            if (e.transactionRef) {
-                map.set(e.transactionRef, {
-                    partnerName: partnerMap[e.partnerKey] || '',
-                    type: 'government',
-                })
-            }
+            addRefs(e, {
+                partnerName: partnerMap[e.partnerKey] || '',
+                type: 'government',
+            })
         })
         forexExchanges.forEach((fx) => {
             ;(fx.transactions || []).forEach((t) => {
@@ -120,12 +123,10 @@ export const StatementList = () => {
             })
         })
         employeeTransactions.forEach((t) => {
-            if (t.transactionRef) {
-                map.set(t.transactionRef, {
-                    partnerName: '',
-                    type: 'employee',
-                })
-            }
+            addRefs(t, {
+                partnerName: '',
+                type: 'employee',
+            })
         })
         return map
     }, [expenses, governmentExpenses, forexExchanges, employeeTransactions, partnerMap])

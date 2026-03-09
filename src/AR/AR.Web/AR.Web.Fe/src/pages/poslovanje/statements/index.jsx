@@ -1,4 +1,4 @@
-import { Layout } from '@/widgets/Layout'
+import { MobileLayout as Layout } from '@/widgets/Layout'
 import { StatementList } from '@/widgets/Poslovanje/Statements/ui/StatementList'
 import { useAuth } from '@/app/context/AuthContext'
 import { AuthButton } from '@/widgets/Auth'

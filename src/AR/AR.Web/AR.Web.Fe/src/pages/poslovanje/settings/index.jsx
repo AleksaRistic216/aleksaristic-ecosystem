@@ -1,4 +1,4 @@
-import { Layout } from '@/widgets/Layout'
+import { MobileLayout as Layout } from '@/widgets/Layout'
 import { PoslovanjeSettings } from '@/widgets/Poslovanje'
 import { useAuth } from '@/app/context/AuthContext'
 import { AuthButton } from '@/widgets/Auth'

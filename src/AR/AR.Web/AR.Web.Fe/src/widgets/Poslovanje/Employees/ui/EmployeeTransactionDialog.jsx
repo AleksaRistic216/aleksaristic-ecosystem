@@ -27,6 +27,7 @@ import {
     Close,
     Delete,
     InsertDriveFile,
+    LinkOff,
     OpenInNew,
 } from '@mui/icons-material'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -89,14 +90,16 @@ export const EmployeeTransactionDialog = ({
             setCurrency(transaction.currency || 'RSD')
             setDate(transaction.date || '')
             setBankAccount(transaction.bankAccount || '')
-            setSelectedTransaction(
-                transaction.transactionRef
-                    ? {
-                          id: transaction.transactionRef,
-                          label: transaction.transactionLabel || '',
-                      }
-                    : null,
-            )
+            const hasMultiRefs = transaction.transactionRefs && typeof transaction.transactionRefs === 'object'
+            if (hasMultiRefs) {
+                setSelectedTransaction(null)
+                const firstData = Object.values(transaction.transactionRefs)[0]
+                if (firstData?.bankAccount) setBankAccount(firstData.bankAccount)
+            } else if (transaction.transactionRef) {
+                setSelectedTransaction({ id: transaction.transactionRef, label: transaction.transactionLabel || '' })
+            } else {
+                setSelectedTransaction(null)
+            }
         } else {
             setDirection('to')
             setDescription('')
@@ -157,6 +160,33 @@ export const EmployeeTransactionDialog = ({
         }
     }
 
+    const linkedRefs = useMemo(() => {
+        if (!transaction?.transactionRefs || typeof transaction.transactionRefs !== 'object') return []
+        return Object.entries(transaction.transactionRefs).map(([txRef, data]) => {
+            const [stmtKey, idxStr] = txRef.split('::')
+            const stmt = statements.find((s) => s.key === stmtKey)
+            let label = data.label || txRef
+            if (stmt) {
+                const stavke = normalizeStavke(stmt.stavke)
+                const stavka = stavke[Number(idxStr)]
+                if (stavka) {
+                    label = `${stavka.datumValute} | ${stavka.nalogKorisnik || ''}${stavka.opis ? ' - ' + stavka.opis : ''}`
+                }
+            }
+            return { ref: txRef, amount: data.amount || 0, bankAccount: data.bankAccount || '', label }
+        })
+    }, [transaction, statements])
+
+    const handleUnlinkRef = async (txRef) => {
+        if (!confirm('Remove this bank statement link?')) return
+        try {
+            await poslovanjService.removeEmployeeTransactionRef(transaction.key, txRef)
+            toast('Link removed', { type: 'success' })
+        } catch (error) {
+            toast('Failed to remove link', { type: 'error' })
+        }
+    }
+
     const attachments = normalizeAttachments(transaction?.attachments)
 
     const handleSave = async () => {
@@ -166,6 +196,7 @@ export const EmployeeTransactionDialog = ({
         }
         setSaving(true)
         try {
+            const hasMultiRefs = transaction?.transactionRefs && typeof transaction.transactionRefs === 'object'
             const data = {
                 employeeKey,
                 direction,
@@ -174,9 +205,20 @@ export const EmployeeTransactionDialog = ({
                 currency,
                 date,
                 bankAccount,
-                transactionRef: selectedTransaction?.id || '',
-                transactionLabel: selectedTransaction?.label || '',
             }
+            console.log('[EmpTxDialog.handleSave] hasMultiRefs:', hasMultiRefs, 'selectedTransaction:', selectedTransaction, 'linkedRefs:', linkedRefs.length)
+            if (hasMultiRefs && !selectedTransaction) {
+                // User cleared the link — remove all refs
+                data.transactionRefs = null
+                data.transactionRef = ''
+                data.transactionLabel = ''
+                console.log('[EmpTxDialog.handleSave] CLEARING all refs (hasMultiRefs && !selectedTransaction)')
+            } else if (!hasMultiRefs) {
+                data.transactionRef = selectedTransaction?.id || ''
+                data.transactionLabel = selectedTransaction?.label || ''
+                console.log('[EmpTxDialog.handleSave] setting single ref:', data.transactionRef)
+            }
+            console.log('[EmpTxDialog.handleSave] final data:', JSON.stringify(data))
             if (isEdit) {
                 await poslovanjService.updateEmployeeTransaction(
                     transaction.key,
@@ -374,42 +416,87 @@ export const EmployeeTransactionDialog = ({
                     </FormControl>
 
                     {bankAccount && (
-                        <Autocomplete
-                            options={statementTransactions}
-                            value={selectedTransaction}
-                            onChange={handleTransactionSelect}
-                            getOptionLabel={(opt) => opt.label || ''}
-                            isOptionEqualToValue={(opt, val) =>
-                                opt.id === val.id
-                            }
-                            renderOption={(props, opt) => (
-                                <li {...props} key={opt.id}>
-                                    <Box sx={{ width: '100%' }}>
-                                        <Typography variant="body2" noWrap>
-                                            {opt.description}
-                                        </Typography>
-                                        <Typography
-                                            variant="caption"
-                                            color="text.secondary"
-                                            noWrap
+                        <>
+                            {linkedRefs.length > 0 && (
+                                <Box sx={{ mb: 1.5 }}>
+                                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                        Linked Transactions ({linkedRefs.length})
+                                    </Typography>
+                                    {linkedRefs.map((lr) => (
+                                        <Box
+                                            key={lr.ref}
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 1,
+                                                py: 0.5,
+                                                px: 1,
+                                                mb: 0.5,
+                                                bgcolor: 'grey.50',
+                                                borderRadius: 1,
+                                                border: '1px solid',
+                                                borderColor: 'divider',
+                                            }}
                                         >
-                                            {opt.datumValute} &middot;{' '}
-                                            {fmtNum(opt.amount)} {opt.currency}
-                                            {opt.opis ? ` · ${opt.opis}` : ''}
-                                        </Typography>
-                                    </Box>
-                                </li>
+                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                <Typography variant="body2" noWrap>
+                                                    {lr.label}
+                                                </Typography>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {fmtNum(lr.amount)} {currency || 'RSD'}
+                                                </Typography>
+                                            </Box>
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => handleUnlinkRef(lr.ref)}
+                                                title="Unlink"
+                                                sx={{ color: '#d32f2f' }}
+                                            >
+                                                <LinkOff fontSize="small" />
+                                            </IconButton>
+                                        </Box>
+                                    ))}
+                                </Box>
                             )}
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="Statement Transaction"
-                                    size="small"
-                                    placeholder="Search transactions..."
+                            {linkedRefs.length === 0 && (
+                                <Autocomplete
+                                    options={statementTransactions}
+                                    value={selectedTransaction}
+                                    onChange={handleTransactionSelect}
+                                    getOptionLabel={(opt) => opt.label || ''}
+                                    isOptionEqualToValue={(opt, val) =>
+                                        opt.id === val.id
+                                    }
+                                    renderOption={(props, opt) => (
+                                        <li {...props} key={opt.id}>
+                                            <Box sx={{ width: '100%' }}>
+                                                <Typography variant="body2" noWrap>
+                                                    {opt.description}
+                                                </Typography>
+                                                <Typography
+                                                    variant="caption"
+                                                    color="text.secondary"
+                                                    noWrap
+                                                >
+                                                    {opt.datumValute} &middot;{' '}
+                                                    {fmtNum(opt.amount)} {opt.currency}
+                                                    {opt.opis ? ` · ${opt.opis}` : ''}
+                                                </Typography>
+                                            </Box>
+                                        </li>
+                                    )}
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Statement Transaction"
+                                            size="small"
+                                            placeholder="Search transactions..."
+                                        />
+                                    )}
+                                    noOptionsText={`No ${direction === 'to' ? 'debit' : 'credit'} transactions found`}
                                 />
                             )}
-                            noOptionsText={`No ${direction === 'to' ? 'debit' : 'credit'} transactions found`}
-                        />
+                        </>
                     )}
                 </Box>
 

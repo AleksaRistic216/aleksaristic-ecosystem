@@ -1,4 +1,4 @@
-import { Layout } from '@/widgets/Layout'
+import { MobileLayout as Layout } from '@/widgets/Layout'
 import { GovernmentList } from '@/widgets/Poslovanje/Government/ui/GovernmentList'
 
 const GovernmentPage = () => (

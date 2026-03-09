@@ -28,6 +28,7 @@ import {
     Close,
     Delete,
     InsertDriveFile,
+    LinkOff,
     OpenInNew,
 } from '@mui/icons-material'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -104,24 +105,15 @@ export const ExpenseDialog = ({
             setPartnerKey(expense.partnerKey || '')
             setPaymentMethod(expense.paymentMethod || 'bank_account')
             setBankAccount(expense.bankAccount || '')
-            if (expense.transactionRef) {
-                let label = expense.transactionLabel || ''
-                const [stmtKey, idxStr] = expense.transactionRef.split('::')
-                const stmt = statements.find((s) => s.key === stmtKey)
-                if (stmt) {
-                    const stavke = normalizeStavke(stmt.stavke)
-                    const stavka = stavke[Number(idxStr)]
-                    if (stavka) {
-                        const bankAmount = stavka.duguje > 0
-                            ? stavka.duguje
-                            : stavka.potrazuje
-                        const expAmount = expense.amount || 0
-                        if (Math.abs(bankAmount - expAmount) > 0.01) {
-                            label = `${stavka.datumValute} | ${fmtNum(expAmount)} of ${fmtNum(bankAmount)} ${stmt.valuta || 'RSD'} | ${stavka.nalogKorisnik || ''}${stavka.opis ? ' - ' + stavka.opis : ''}`
-                        }
-                    }
-                }
-                setSelectedTransaction({ id: expense.transactionRef, label })
+            // Read linked refs — old single-ref format only
+            const hasMultiRefs = expense.transactionRefs && typeof expense.transactionRefs === 'object'
+            if (hasMultiRefs) {
+                // Multi-refs are shown as a list, not in the Autocomplete
+                setSelectedTransaction(null)
+                const firstData = Object.values(expense.transactionRefs)[0]
+                if (firstData?.bankAccount) setBankAccount(firstData.bankAccount)
+            } else if (expense.transactionRef) {
+                setSelectedTransaction({ id: expense.transactionRef, label: expense.transactionLabel || '' })
             } else {
                 setSelectedTransaction(null)
             }
@@ -156,10 +148,32 @@ export const ExpenseDialog = ({
         }
     }, [expense, isOpen, defaultPartnerKey, defaultTransaction])
 
+    const linkedRefs = useMemo(() => {
+        if (!expense?.transactionRefs || typeof expense.transactionRefs !== 'object') return []
+        return Object.entries(expense.transactionRefs).map(([txRef, data]) => {
+            const [stmtKey, idxStr] = txRef.split('::')
+            const stmt = statements.find((s) => s.key === stmtKey)
+            let label = data.label || txRef
+            if (stmt) {
+                const stavke = normalizeStavke(stmt.stavke)
+                const stavka = stavke[Number(idxStr)]
+                if (stavka) {
+                    label = `${stavka.datumValute} | ${stavka.nalogKorisnik || ''}${stavka.opis ? ' - ' + stavka.opis : ''}`
+                }
+            }
+            return { ref: txRef, amount: data.amount || 0, bankAccount: data.bankAccount || '', label }
+        })
+    }, [expense, statements])
+
     const consumedByRef = useMemo(() => {
         const map = {}
         allExpenses.forEach((e) => {
-            if (e.transactionRef && (!expense || e.key !== expense.key)) {
+            if (expense && e.key === expense.key) return
+            if (e.transactionRefs && typeof e.transactionRefs === 'object') {
+                Object.entries(e.transactionRefs).forEach(([r, data]) => {
+                    map[r] = (map[r] || 0) + (data.amount || 0)
+                })
+            } else if (e.transactionRef) {
                 map[e.transactionRef] =
                     (map[e.transactionRef] || 0) + (e.amount || 0)
             }
@@ -218,6 +232,16 @@ export const ExpenseDialog = ({
         }
     }
 
+    const handleUnlinkRef = async (txRef) => {
+        if (!confirm('Remove this bank statement link?')) return
+        try {
+            await poslovanjService.removeExpenseTransactionRef(expense.key, txRef)
+            toast('Link removed', { type: 'success' })
+        } catch (error) {
+            toast('Failed to remove link', { type: 'error' })
+        }
+    }
+
     const attachments = normalizeAttachments(expense?.attachments)
 
     const handleSave = async () => {
@@ -235,18 +259,35 @@ export const ExpenseDialog = ({
                 status,
                 partnerKey,
             }
+            const hasMultiRefs = expense?.transactionRefs && typeof expense.transactionRefs === 'object'
+            console.log('[ExpenseDialog.handleSave] hasMultiRefs:', hasMultiRefs, 'selectedTransaction:', selectedTransaction, 'linkedRefs:', linkedRefs.length, 'status:', status)
             if (status !== 'unpaid') {
                 data.paymentMethod = paymentMethod
                 data.bankAccount =
                     paymentMethod === 'cash' ? '' : bankAccount
-                data.transactionRef = selectedTransaction?.id || ''
-                data.transactionLabel = selectedTransaction?.label || ''
+                if (hasMultiRefs && !selectedTransaction) {
+                    // User cleared the link — remove all refs
+                    data.transactionRefs = null
+                    data.transactionRef = ''
+                    data.transactionLabel = ''
+                    console.log('[ExpenseDialog.handleSave] CLEARING all refs (hasMultiRefs && !selectedTransaction)')
+                } else if (!hasMultiRefs) {
+                    data.transactionRef = selectedTransaction?.id || ''
+                    data.transactionLabel = selectedTransaction?.label || ''
+                    console.log('[ExpenseDialog.handleSave] setting single ref:', data.transactionRef)
+                }
             } else {
                 data.paymentMethod = ''
                 data.bankAccount = ''
-                data.transactionRef = ''
-                data.transactionLabel = ''
+                if (!hasMultiRefs) {
+                    data.transactionRef = ''
+                    data.transactionLabel = ''
+                } else {
+                    // Clear multi-refs when setting to unpaid
+                    data.transactionRefs = null
+                }
             }
+            console.log('[ExpenseDialog.handleSave] final data:', JSON.stringify(data))
             if (isEdit) {
                 await poslovanjService.updateExpense(expense.key, data)
                 for (const file of pendingFiles) {
@@ -461,52 +502,97 @@ export const ExpenseDialog = ({
                         )}
 
                         {paymentMethod !== 'cash' && bankAccount && (
-                            <Autocomplete
-                                options={transactions}
-                                value={selectedTransaction}
-                                onChange={handleTransactionSelect}
-                                getOptionLabel={(opt) => opt.label || ''}
-                                isOptionEqualToValue={(opt, val) =>
-                                    opt.id === val.id
-                                }
-                                renderOption={(props, opt) => (
-                                    <li {...props} key={opt.id}>
-                                        <Box sx={{ width: '100%' }}>
-                                            <Typography
-                                                variant="body2"
-                                                noWrap
+                            <>
+                                {linkedRefs.length > 0 && (
+                                    <Box sx={{ mb: 1.5 }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                            Linked Transactions ({linkedRefs.length})
+                                        </Typography>
+                                        {linkedRefs.map((lr) => (
+                                            <Box
+                                                key={lr.ref}
+                                                sx={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 1,
+                                                    py: 0.5,
+                                                    px: 1,
+                                                    mb: 0.5,
+                                                    bgcolor: 'grey.50',
+                                                    borderRadius: 1,
+                                                    border: '1px solid',
+                                                    borderColor: 'divider',
+                                                }}
                                             >
-                                                {opt.description}
-                                            </Typography>
-                                            <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                                noWrap
-                                            >
-                                                {opt.datumValute} &middot;{' '}
-                                                {fmtNum(opt.amount)}{' '}
-                                                {opt.currency}
-                                                {opt.isPartial
-                                                    ? ` (of ${fmtNum(opt.originalAmount)})`
-                                                    : ''}
-                                                {opt.opis
-                                                    ? ` · ${opt.opis}`
-                                                    : ''}
-                                            </Typography>
-                                        </Box>
-                                    </li>
+                                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                    <Typography variant="body2" noWrap>
+                                                        {lr.label}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {fmtNum(lr.amount)} {currency || 'RSD'}
+                                                    </Typography>
+                                                </Box>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => handleUnlinkRef(lr.ref)}
+                                                    title="Unlink"
+                                                    sx={{ color: '#d32f2f' }}
+                                                >
+                                                    <LinkOff fontSize="small" />
+                                                </IconButton>
+                                            </Box>
+                                        ))}
+                                    </Box>
                                 )}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        label="Statement Transaction"
-                                        size="small"
-                                        placeholder="Search transactions..."
+                                {linkedRefs.length === 0 && (
+                                    <Autocomplete
+                                        options={transactions}
+                                        value={selectedTransaction}
+                                        onChange={handleTransactionSelect}
+                                        getOptionLabel={(opt) => opt.label || ''}
+                                        isOptionEqualToValue={(opt, val) =>
+                                            opt.id === val.id
+                                        }
+                                        renderOption={(props, opt) => (
+                                            <li {...props} key={opt.id}>
+                                                <Box sx={{ width: '100%' }}>
+                                                    <Typography
+                                                        variant="body2"
+                                                        noWrap
+                                                    >
+                                                        {opt.description}
+                                                    </Typography>
+                                                    <Typography
+                                                        variant="caption"
+                                                        color="text.secondary"
+                                                        noWrap
+                                                    >
+                                                        {opt.datumValute} &middot;{' '}
+                                                        {fmtNum(opt.amount)}{' '}
+                                                        {opt.currency}
+                                                        {opt.isPartial
+                                                            ? ` (of ${fmtNum(opt.originalAmount)})`
+                                                            : ''}
+                                                        {opt.opis
+                                                            ? ` · ${opt.opis}`
+                                                            : ''}
+                                                    </Typography>
+                                                </Box>
+                                            </li>
+                                        )}
+                                        renderInput={(params) => (
+                                            <TextField
+                                                {...params}
+                                                label="Statement Transaction"
+                                                size="small"
+                                                placeholder="Search transactions..."
+                                            />
+                                        )}
+                                        sx={{ mb: 2 }}
+                                        noOptionsText="No debit transactions found"
                                     />
                                 )}
-                                sx={{ mb: 2 }}
-                                noOptionsText="No debit transactions found"
-                            />
+                            </>
                         )}
                     </>
                 )}

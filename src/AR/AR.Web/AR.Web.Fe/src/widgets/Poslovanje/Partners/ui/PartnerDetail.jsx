@@ -70,6 +70,32 @@ const normalizeStavke = (stavke) => {
     return Object.values(stavke)
 }
 
+const getLinkedRefs = (item) => {
+    if (item.transactionRefs && typeof item.transactionRefs === 'object') {
+        return Object.entries(item.transactionRefs).map(([r, data]) => ({
+            ref: r,
+            amount: data.amount || 0,
+            label: data.label || '',
+            bankAccount: data.bankAccount || '',
+        }))
+    }
+    if (item.transactionRef) {
+        return [{
+            ref: item.transactionRef,
+            amount: item.amount || 0,
+            label: item.transactionLabel || '',
+            bankAccount: item.bankAccount || '',
+        }]
+    }
+    return []
+}
+
+const getTotalLinked = (item) =>
+    getLinkedRefs(item).reduce((sum, r) => sum + r.amount, 0)
+
+const isFullyLinked = (item) =>
+    getTotalLinked(item) >= (item.amount || 0) - 0.01
+
 export const PartnerDetail = ({
     partner,
     invoices,
@@ -146,7 +172,7 @@ export const PartnerDetail = ({
             const amt = t.amount || 0
             if (t.direction === 'to') paidOut += amt
             else received += amt
-            if (!t.transactionRef) unlinked += amt
+            if (!isFullyLinked(t)) unlinked += amt
         })
         return { paidOut, received, unlinked }
     }, [employeeTransactions])
@@ -165,17 +191,23 @@ export const PartnerDetail = ({
         )
     }, [employeeTransactions])
 
+    const consumedByRef = useMemo(() => {
+        const map = {}
+        const addItem = (item) => {
+            getLinkedRefs(item).forEach(({ ref, amount }) => {
+                map[ref] = (map[ref] || 0) + amount
+            })
+        }
+        expenses.forEach(addItem)
+        employeeTransactions.forEach(addItem)
+        partnerGovExpenses.forEach(addItem)
+        return map
+    }, [expenses, employeeTransactions, partnerGovExpenses])
+
     const resolvedMappedTransactions = useMemo(() => {
         const stmtMap = {}
         statements.forEach((s) => {
             stmtMap[s.key] = s
-        })
-        const consumedByRef = {}
-        expenses.forEach((e) => {
-            if (e.transactionRef) {
-                consumedByRef[e.transactionRef] =
-                    (consumedByRef[e.transactionRef] || 0) + (e.amount || 0)
-            }
         })
         return transactionPartners
             .map((tp) => {
@@ -204,7 +236,7 @@ export const PartnerDetail = ({
                     a.stavka.datumValute || '',
                 ),
             )
-    }, [transactionPartners, statements, expenses])
+    }, [transactionPartners, statements, consumedByRef])
 
     const mappedTotals = useMemo(() => {
         let debit = 0
@@ -221,8 +253,10 @@ export const PartnerDetail = ({
         statements.forEach((s) => { stmtMap[s.key] = s })
         const map = {}
         expenses.forEach((e) => {
-            if (!e.transactionRef) return
-            const [stmtKey, idxStr] = e.transactionRef.split('::')
+            const refs = getLinkedRefs(e)
+            if (refs.length === 0) return
+            const firstRef = refs[0].ref
+            const [stmtKey, idxStr] = firstRef.split('::')
             const stmt = stmtMap[stmtKey]
             if (!stmt) return
             const stavke = normalizeStavke(stmt.stavke)
@@ -236,6 +270,7 @@ export const PartnerDetail = ({
                 amount: stavka.duguje,
                 currency: stmt.valuta || 'RSD',
                 brojIzvoda: stmt.brojIzvoda,
+                linkedRefs: refs,
             }
         })
         return map
@@ -246,8 +281,10 @@ export const PartnerDetail = ({
         statements.forEach((s) => { stmtMap[s.key] = s })
         const map = {}
         partnerGovExpenses.forEach((e) => {
-            if (!e.transactionRef) return
-            const [stmtKey, idxStr] = e.transactionRef.split('::')
+            const refs = getLinkedRefs(e)
+            if (refs.length === 0) return
+            const firstRef = refs[0].ref
+            const [stmtKey, idxStr] = firstRef.split('::')
             const stmt = stmtMap[stmtKey]
             if (!stmt) return
             const stavke = normalizeStavke(stmt.stavke)
@@ -261,6 +298,7 @@ export const PartnerDetail = ({
                 amount: stavka.duguje,
                 currency: stmt.valuta || 'RSD',
                 brojIzvoda: stmt.brojIzvoda,
+                linkedRefs: refs,
             }
         })
         return map
@@ -274,21 +312,24 @@ export const PartnerDetail = ({
 
     const linkedByExpenses = useMemo(() => {
         const map = new Map()
-        allExpenses.forEach((e) => {
-            if (e.transactionRef) {
-                map.set(e.transactionRef, {
-                    partnerName: partnerNameMap[e.partnerKey] || '',
-                    type: 'expense',
-                })
+        const addRefs = (item, info) => {
+            if (item.transactionRefs && typeof item.transactionRefs === 'object') {
+                Object.keys(item.transactionRefs).forEach((r) => map.set(r, info))
+            } else if (item.transactionRef) {
+                map.set(item.transactionRef, info)
             }
+        }
+        allExpenses.forEach((e) => {
+            addRefs(e, {
+                partnerName: partnerNameMap[e.partnerKey] || '',
+                type: 'expense',
+            })
         })
         governmentExpenses.forEach((e) => {
-            if (e.transactionRef) {
-                map.set(e.transactionRef, {
-                    partnerName: partnerNameMap[e.partnerKey] || '',
-                    type: 'government',
-                })
-            }
+            addRefs(e, {
+                partnerName: partnerNameMap[e.partnerKey] || '',
+                type: 'government',
+            })
         })
         forexExchanges.forEach((fx) => {
             ;(fx.transactions || []).forEach((t) => {
@@ -333,25 +374,26 @@ export const PartnerDetail = ({
         // Mapped transactions (standalone bank movements, remaining after expense consumption)
         let debit = mappedTotals.debit
         let credit = mappedTotals.credit
-        // Expenses linked to bank statements — use expense amount (not bank txn amount)
-        // so it cancels cleanly against totalExpenses in the balance formula
+        // Expenses linked to bank statements — use linked amount totals
         expenses.forEach((e) => {
-            if (e.transactionRef) debit += e.amount || 0
+            const linked = getTotalLinked(e)
+            if (linked > 0) debit += linked
         })
         // Invoices linked to bank statements — use invoice amount
         invoices.forEach((inv) => {
             if (inv.linkedStatement) credit += inv.totalAmount || 0
         })
-        // Employee transactions linked to bank statements — use txn amount
+        // Employee transactions linked to bank statements — use linked amount totals
         employeeTransactions.forEach((t) => {
-            if (!t.transactionRef) return
-            const amt = t.amount || 0
-            if (t.direction === 'to') debit += amt
-            else credit += amt
+            const linked = getTotalLinked(t)
+            if (linked <= 0) return
+            if (t.direction === 'to') debit += linked
+            else credit += linked
         })
-        // Government expenses linked to bank statements — use expense amount
+        // Government expenses linked to bank statements — use linked amount totals
         partnerGovExpenses.forEach((e) => {
-            if (e.transactionRef) debit += e.amount || 0
+            const linked = getTotalLinked(e)
+            if (linked > 0) debit += linked
         })
         return { debit, credit }
     }, [expenses, invoices, employeeTransactions, partnerGovExpenses, mappedTotals])
@@ -420,14 +462,6 @@ export const PartnerDetail = ({
             toast('Partner has no bank accounts', { type: 'warning' })
             return
         }
-
-        const consumedByRef = {}
-        expenses.forEach((e) => {
-            if (e.transactionRef) {
-                consumedByRef[e.transactionRef] =
-                    (consumedByRef[e.transactionRef] || 0) + (e.amount || 0)
-            }
-        })
 
         const matchesPartner = (txAccount) =>
             partnerAccounts.some(
@@ -552,12 +586,18 @@ export const PartnerDetail = ({
                     )
                 }
                 for (const exp of match.expenses) {
+                    await poslovanjService.addExpenseTransactionRef(
+                        exp.key,
+                        match.transaction.ref,
+                        {
+                            amount: exp.amount || 0,
+                            label: match.transaction.label,
+                            bankAccount: match.transaction.bankAccount,
+                        },
+                    )
                     await poslovanjService.updateExpense(exp.key, {
                         status: 'paid',
                         paymentMethod: 'bank_account',
-                        bankAccount: match.transaction.bankAccount,
-                        transactionRef: match.transaction.ref,
-                        transactionLabel: match.transaction.label,
                     })
                     count++
                 }
@@ -576,6 +616,11 @@ export const PartnerDetail = ({
     const [itemBalanceExpense, setItemBalanceExpense] = useState(null)
 
     const handleAutoBalanceItem = (expense) => {
+        const itemRemaining = (expense.amount || 0) - getTotalLinked(expense)
+        if (itemRemaining <= 0.01) {
+            toast('Expense is already fully linked', { type: 'info' })
+            return
+        }
         const partnerAccounts = bankAccounts
             .map((a) => normalizeAccount(a.account))
             .filter(Boolean)
@@ -587,14 +632,6 @@ export const PartnerDetail = ({
             return
         }
 
-        const consumedByRef = {}
-        expenses.forEach((e) => {
-            if (e.transactionRef) {
-                consumedByRef[e.transactionRef] =
-                    (consumedByRef[e.transactionRef] || 0) + (e.amount || 0)
-            }
-        })
-
         const matchesPartner = (txAccount) =>
             partnerAccounts.some(
                 (pa) => txAccount.includes(pa) || pa.includes(txAccount),
@@ -604,18 +641,18 @@ export const PartnerDetail = ({
         statements.forEach((s) => {
             const stavke = normalizeStavke(s.stavke)
             stavke.forEach((t, i) => {
-                const ref = `${s.key}::${i}`
-                const isMapped = partnerMappedRefs.has(ref)
+                const txRef = `${s.key}::${i}`
+                const isMapped = partnerMappedRefs.has(txRef)
                 if (!isMapped) {
                     const txAccount = normalizeAccount(t.brojRacuna)
                     if (!txAccount || !matchesPartner(txAccount)) return
                 }
                 if (t.duguje <= 0) return
-                const consumed = consumedByRef[ref] || 0
+                const consumed = consumedByRef[txRef] || 0
                 const available = t.duguje - consumed
                 if (available <= 0.01) return
                 candidates.push({
-                    ref,
+                    ref: txRef,
                     amount: t.duguje,
                     available,
                     currency: s.valuta || 'RSD',
@@ -624,7 +661,7 @@ export const PartnerDetail = ({
                     description: t.nalogKorisnik || '',
                     opis: t.opis || '',
                     label: `${t.datumValute} | ${fmtNum(t.duguje)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`,
-                    partnerMappingKey: partnerMappedRefs.get(ref) || null,
+                    partnerMappingKey: partnerMappedRefs.get(txRef) || null,
                 })
             })
         })
@@ -645,27 +682,40 @@ export const PartnerDetail = ({
     }
 
     const handleItemBalanceConfirm = async (expense, tx) => {
+
         try {
+            const totalLinked = getTotalLinked(expense)
+            const itemRemaining = (expense.amount || 0) - totalLinked
+            const allocated = Math.min(itemRemaining, tx.available)
+            console.log('[handleItemBalanceConfirm] expense.key:', expense.key, 'tx.ref:', tx.ref, 'totalLinked:', totalLinked, 'itemRemaining:', itemRemaining, 'allocated:', allocated, 'tx.available:', tx.available, 'tx.bankAccount:', tx.bankAccount)
+
             if (tx.partnerMappingKey) {
-                const newRemaining =
-                    (tx.available || tx.amount) - (expense.amount || 0)
-                if (newRemaining < 0.01) {
+                const newMappedRemaining = tx.available - allocated
+                if (newMappedRemaining < 0.01) {
                     await poslovanjService.unlinkTransactionFromPartner(
                         tx.partnerMappingKey,
                     )
                 }
             }
-            await poslovanjService.updateExpense(expense.key, {
-                status: 'paid',
-                paymentMethod: 'bank_account',
-                bankAccount: tx.bankAccount,
-                transactionRef: tx.ref,
-                transactionLabel: tx.label,
-            })
+            await poslovanjService.addExpenseTransactionRef(
+                expense.key,
+                tx.ref,
+                {
+                    amount: allocated,
+                    label: tx.label,
+                    bankAccount: tx.bankAccount,
+                },
+            )
+            if (totalLinked + allocated >= (expense.amount || 0) - 0.01) {
+                await poslovanjService.updateExpense(expense.key, {
+                    status: 'paid',
+                    paymentMethod: 'bank_account',
+                })
+            }
             toast('Expense linked', { type: 'success' })
             setItemBalanceOpen(false)
-        } catch {
-            toast('Failed to link expense', { type: 'error' })
+        } catch (err) {
+            toast(err.message || 'Failed to link expense', { type: 'error' })
         }
     }
 
@@ -674,6 +724,11 @@ export const PartnerDetail = ({
     const [empTxLinkItem, setEmpTxLinkItem] = useState(null)
 
     const handleAutoLinkEmpTx = (empTx) => {
+        const itemRemaining = (empTx.amount || 0) - getTotalLinked(empTx)
+        if (itemRemaining <= 0.01) {
+            toast('Transaction is already fully linked', { type: 'info' })
+            return
+        }
         const partnerAccounts = bankAccounts
             .map((a) => normalizeAccount(a.account))
             .filter(Boolean)
@@ -681,14 +736,6 @@ export const PartnerDetail = ({
             toast('Partner has no bank accounts', { type: 'warning' })
             return
         }
-
-        const consumedByRef = {}
-        employeeTransactions.forEach((t) => {
-            if (t.transactionRef) {
-                consumedByRef[t.transactionRef] =
-                    (consumedByRef[t.transactionRef] || 0) + (t.amount || 0)
-            }
-        })
 
         const matchesPartner = (txAccount) =>
             partnerAccounts.some(
@@ -699,8 +746,8 @@ export const PartnerDetail = ({
         statements.forEach((s) => {
             const stavke = normalizeStavke(s.stavke)
             stavke.forEach((t, i) => {
-                const ref = `${s.key}::${i}`
-                const isMapped = partnerMappedRefs.has(ref)
+                const txRef = `${s.key}::${i}`
+                const isMapped = partnerMappedRefs.has(txRef)
                 if (!isMapped) {
                     const txAccount = normalizeAccount(t.brojRacuna)
                     if (!txAccount || !matchesPartner(txAccount)) return
@@ -711,11 +758,11 @@ export const PartnerDetail = ({
                 const direction = isDuguje ? 'to' : 'from'
                 if (direction !== empTx.direction) return
                 const amount = isDuguje ? t.duguje : t.potrazuje
-                const consumed = consumedByRef[ref] || 0
+                const consumed = consumedByRef[txRef] || 0
                 const available = amount - consumed
                 if (available <= 0.01) return
                 candidates.push({
-                    ref,
+                    ref: txRef,
                     direction,
                     amount,
                     available,
@@ -725,7 +772,7 @@ export const PartnerDetail = ({
                     description: t.nalogKorisnik || '',
                     opis: t.opis || '',
                     label: `${t.datumValute} | ${fmtNum(amount)} ${s.valuta || 'RSD'} | ${t.nalogKorisnik || ''}${t.opis ? ' - ' + t.opis : ''}`,
-                    partnerMappingKey: partnerMappedRefs.get(ref) || null,
+                    partnerMappingKey: partnerMappedRefs.get(txRef) || null,
                 })
             })
         })
@@ -746,25 +793,34 @@ export const PartnerDetail = ({
     }
 
     const handleEmpTxLinkConfirm = async (empTx, bankEntry) => {
+
         try {
+            const totalLinked = getTotalLinked(empTx)
+            const itemRemaining = (empTx.amount || 0) - totalLinked
+            const allocated = Math.min(itemRemaining, bankEntry.available)
+            console.log('[handleEmpTxLinkConfirm] empTx.key:', empTx.key, 'bankEntry.ref:', bankEntry.ref, 'totalLinked:', totalLinked, 'itemRemaining:', itemRemaining, 'allocated:', allocated, 'bankEntry.available:', bankEntry.available, 'bankEntry.bankAccount:', bankEntry.bankAccount)
+
             if (bankEntry.partnerMappingKey) {
-                const newRemaining =
-                    (bankEntry.available || bankEntry.amount) - (empTx.amount || 0)
-                if (newRemaining < 0.01) {
+                const newMappedRemaining = bankEntry.available - allocated
+                if (newMappedRemaining < 0.01) {
                     await poslovanjService.unlinkTransactionFromPartner(
                         bankEntry.partnerMappingKey,
                     )
                 }
             }
-            await poslovanjService.updateEmployeeTransaction(empTx.key, {
-                bankAccount: bankEntry.bankAccount,
-                transactionRef: bankEntry.ref,
-                transactionLabel: bankEntry.label,
-            })
+            await poslovanjService.addEmployeeTransactionRef(
+                empTx.key,
+                bankEntry.ref,
+                {
+                    amount: allocated,
+                    label: bankEntry.label,
+                    bankAccount: bankEntry.bankAccount,
+                },
+            )
             toast('Transaction linked', { type: 'success' })
             setEmpTxLinkOpen(false)
-        } catch {
-            toast('Failed to link transaction', { type: 'error' })
+        } catch (err) {
+            toast(err.message || 'Failed to link transaction', { type: 'error' })
         }
     }
 
@@ -1270,7 +1326,7 @@ export const PartnerDetail = ({
                                                             align="center"
                                                             onClick={(ev) => ev.stopPropagation()}
                                                         >
-                                                            {!t.transactionRef && (
+                                                            {!isFullyLinked(t) && (
                                                                 <IconButton
                                                                     size="small"
                                                                     onClick={() =>
@@ -1438,13 +1494,13 @@ export const PartnerDetail = ({
                                         )}
                                     </Box>
                                     <Box onClick={(ev) => ev.stopPropagation()}>
-                                        {e.status === 'unpaid' && (
+                                        {!isFullyLinked(e) && (
                                             <IconButton
                                                 size="small"
                                                 onClick={() =>
                                                     handleAutoBalanceItem(e)
                                                 }
-                                                title="Auto balance"
+                                                title="Auto link"
                                             >
                                                 <SyncAlt fontSize="small" />
                                             </IconButton>
@@ -1605,13 +1661,13 @@ export const PartnerDetail = ({
                                                     <AttachFile fontSize="small" />
                                                 </IconButton>
                                             )}
-                                            {e.status === 'unpaid' && (
+                                            {!isFullyLinked(e) && (
                                                 <IconButton
                                                     size="small"
                                                     onClick={() =>
                                                         handleAutoBalanceItem(e)
                                                     }
-                                                    title="Auto balance"
+                                                    title="Auto link"
                                                 >
                                                     <SyncAlt fontSize="small" />
                                                 </IconButton>
@@ -2036,13 +2092,19 @@ export const PartnerDetail = ({
                         <Typography variant="h6" fontWeight={600}>
                             Select Transaction
                         </Typography>
-                        {itemBalanceExpense && (
-                            <Typography variant="body2" color="text.secondary">
-                                {itemBalanceExpense.description} &mdash;{' '}
-                                {fmtNum(itemBalanceExpense.amount)}{' '}
-                                {itemBalanceExpense.currency || 'RSD'}
-                            </Typography>
-                        )}
+                        {itemBalanceExpense && (() => {
+                            const remaining = (itemBalanceExpense.amount || 0) - getTotalLinked(itemBalanceExpense)
+                            const cur = itemBalanceExpense.currency || 'RSD'
+                            return (
+                                <Typography variant="body2" color="text.secondary">
+                                    {itemBalanceExpense.description} &mdash;{' '}
+                                    {remaining < (itemBalanceExpense.amount || 0) - 0.01
+                                        ? <><strong>{fmtNum(remaining)}</strong> remaining of {fmtNum(itemBalanceExpense.amount)} {cur}</>
+                                        : <>{fmtNum(itemBalanceExpense.amount)} {cur}</>
+                                    }
+                                </Typography>
+                            )
+                        })()}
                     </Box>
                     <IconButton
                         onClick={() => setItemBalanceOpen(false)}
@@ -2087,10 +2149,9 @@ export const PartnerDetail = ({
                                         )}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                        {itemBalanceExpense &&
-                                        Math.abs(tx.amount - (itemBalanceExpense.amount || 0)) > 0.01 ? (
+                                        {Math.abs(tx.available - tx.amount) > 0.01 ? (
                                             <>
-                                                {fmtNum(itemBalanceExpense.amount)}{' '}
+                                                {fmtNum(tx.available)}{' '}
                                                 <Typography
                                                     component="span"
                                                     variant="body2"
@@ -2106,6 +2167,34 @@ export const PartnerDetail = ({
                                         {tx.currency}
                                     </TableCell>
                                     <TableCell align="center">
+                                        {(() => {
+                                            const remaining = itemBalanceExpense
+                                                ? (itemBalanceExpense.amount || 0) - getTotalLinked(itemBalanceExpense)
+                                                : 0
+                                            const allocated = Math.min(remaining, tx.available)
+                                            if (remaining <= 0.01) return null
+                                            if (tx.available < remaining - 0.01) {
+                                                return (
+                                                    <Chip
+                                                        label={`covers ${fmtNum(allocated)} of ${fmtNum(remaining)}`}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ mb: 0.5, color: '#e65100', borderColor: '#e65100' }}
+                                                    />
+                                                )
+                                            }
+                                            if (tx.available > remaining + 0.01) {
+                                                return (
+                                                    <Chip
+                                                        label={`will allocate ${fmtNum(allocated)}`}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ mb: 0.5, color: '#1565c0', borderColor: '#1565c0' }}
+                                                    />
+                                                )
+                                            }
+                                            return null
+                                        })()}
                                         <Button
                                             size="small"
                                             variant="outlined"
@@ -2145,13 +2234,19 @@ export const PartnerDetail = ({
                         <Typography variant="h6" fontWeight={600}>
                             Select Transaction
                         </Typography>
-                        {empTxLinkItem && (
-                            <Typography variant="body2" color="text.secondary">
-                                {empTxLinkItem.description || '—'} &mdash;{' '}
-                                {fmtNum(empTxLinkItem.amount)}{' '}
-                                {empTxLinkItem.currency || 'RSD'}
-                            </Typography>
-                        )}
+                        {empTxLinkItem && (() => {
+                            const remaining = (empTxLinkItem.amount || 0) - getTotalLinked(empTxLinkItem)
+                            const cur = empTxLinkItem.currency || 'RSD'
+                            return (
+                                <Typography variant="body2" color="text.secondary">
+                                    {empTxLinkItem.description || '—'} &mdash;{' '}
+                                    {remaining < (empTxLinkItem.amount || 0) - 0.01
+                                        ? <><strong>{fmtNum(remaining)}</strong> remaining of {fmtNum(empTxLinkItem.amount)} {cur}</>
+                                        : <>{fmtNum(empTxLinkItem.amount)} {cur}</>
+                                    }
+                                </Typography>
+                            )
+                        })()}
                     </Box>
                     <IconButton
                         onClick={() => setEmpTxLinkOpen(false)}
@@ -2199,10 +2294,9 @@ export const PartnerDetail = ({
                                         align="right"
                                         sx={{ fontWeight: 600 }}
                                     >
-                                        {empTxLinkItem &&
-                                        Math.abs(tx.amount - (empTxLinkItem.amount || 0)) > 0.01 ? (
+                                        {Math.abs(tx.available - tx.amount) > 0.01 ? (
                                             <>
-                                                {fmtNum(empTxLinkItem.amount)}{' '}
+                                                {fmtNum(tx.available)}{' '}
                                                 <Typography
                                                     component="span"
                                                     variant="body2"
@@ -2218,6 +2312,34 @@ export const PartnerDetail = ({
                                         {tx.currency}
                                     </TableCell>
                                     <TableCell align="center">
+                                        {(() => {
+                                            const remaining = empTxLinkItem
+                                                ? (empTxLinkItem.amount || 0) - getTotalLinked(empTxLinkItem)
+                                                : 0
+                                            const allocated = Math.min(remaining, tx.available)
+                                            if (remaining <= 0.01) return null
+                                            if (tx.available < remaining - 0.01) {
+                                                return (
+                                                    <Chip
+                                                        label={`covers ${fmtNum(allocated)} of ${fmtNum(remaining)}`}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ mb: 0.5, color: '#e65100', borderColor: '#e65100' }}
+                                                    />
+                                                )
+                                            }
+                                            if (tx.available > remaining + 0.01) {
+                                                return (
+                                                    <Chip
+                                                        label={`will allocate ${fmtNum(allocated)}`}
+                                                        size="small"
+                                                        variant="outlined"
+                                                        sx={{ mb: 0.5, color: '#1565c0', borderColor: '#1565c0' }}
+                                                    />
+                                                )
+                                            }
+                                            return null
+                                        })()}
                                         <Button
                                             size="small"
                                             variant="outlined"

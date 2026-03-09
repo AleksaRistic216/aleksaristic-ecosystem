@@ -47,6 +47,7 @@ export const EmployeeList = () => {
     const [statements, setStatements] = useState([])
     const [partners, setPartners] = useState([])
     const [transactionPartners, setTransactionPartners] = useState([])
+    const [expenses, setExpenses] = useState([])
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editEmployee, setEditEmployee] = useState(null)
     const [viewEmployee, setViewEmployee] = useState(null)
@@ -57,12 +58,14 @@ export const EmployeeList = () => {
         const unsub3 = poslovanjService.onStatements(setStatements)
         const unsub4 = poslovanjService.onPartners(setPartners)
         const unsub5 = poslovanjService.onTransactionPartners(setTransactionPartners)
+        const unsub6 = poslovanjService.onExpenses(setExpenses)
         return () => {
             unsub1()
             unsub2()
             unsub3()
             unsub4()
             unsub5()
+            unsub6()
         }
     }, [])
 
@@ -151,6 +154,7 @@ export const EmployeeList = () => {
                 transactions={transactions.filter(
                     (t) => t.employeeKey === viewEmployee.key,
                 )}
+                allExpenses={expenses}
                 statements={statements}
                 accounts={accounts}
                 transactionPartners={transactionPartners.filter(

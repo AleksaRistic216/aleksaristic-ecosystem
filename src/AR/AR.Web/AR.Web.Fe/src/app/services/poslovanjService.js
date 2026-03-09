@@ -18,17 +18,28 @@ const normalizeStavke = (stavke) => {
     return Object.values(stavke)
 }
 
+const getUsedForRef = (item, txRef) => {
+    if (item.transactionRefs) {
+        const rd = item.transactionRefs[txRef]
+        return rd ? rd.amount || 0 : 0
+    }
+    return item.transactionRef === txRef ? item.amount || 0 : 0
+}
+
 const checkTransactionCapacity = async (txRef, newAmount, exclude = {}) => {
+    console.log('[checkTransactionCapacity] txRef:', txRef, 'newAmount:', newAmount, 'exclude:', JSON.stringify(exclude))
     const [stmtKey, idxStr] = txRef.split('::')
     const idx = Number(idxStr)
 
-    const [stmtSnap, expSnap, govSnap, invSnap, forexSnap] = await Promise.all([
-        get(ref(db, `/poslovanje-statements/${stmtKey}`)),
-        get(ref(db, '/poslovanje-expenses')),
-        get(ref(db, '/poslovanje-government-expenses')),
-        get(ref(db, '/poslovanje-invoices')),
-        get(ref(db, '/poslovanje-forex-exchanges')),
-    ])
+    const [stmtSnap, expSnap, govSnap, empSnap, invSnap, forexSnap] =
+        await Promise.all([
+            get(ref(db, `/poslovanje-statements/${stmtKey}`)),
+            get(ref(db, '/poslovanje-expenses')),
+            get(ref(db, '/poslovanje-government-expenses')),
+            get(ref(db, '/poslovanje-employee-transactions')),
+            get(ref(db, '/poslovanje-invoices')),
+            get(ref(db, '/poslovanje-forex-exchanges')),
+        ])
 
     if (!stmtSnap.exists()) throw new Error('Statement not found')
     const stmt = stmtSnap.val()
@@ -41,15 +52,19 @@ const checkTransactionCapacity = async (txRef, newAmount, exclude = {}) => {
 
     if (expSnap.exists()) {
         Object.entries(expSnap.val()).forEach(([k, e]) => {
-            if (k !== exclude.expenseKey && e.transactionRef === txRef)
-                used += e.amount || 0
+            if (k !== exclude.expenseKey) used += getUsedForRef(e, txRef)
         })
     }
 
     if (govSnap.exists()) {
         Object.entries(govSnap.val()).forEach(([k, e]) => {
-            if (k !== exclude.govExpenseKey && e.transactionRef === txRef)
-                used += e.amount || 0
+            if (k !== exclude.govExpenseKey) used += getUsedForRef(e, txRef)
+        })
+    }
+
+    if (empSnap.exists()) {
+        Object.entries(empSnap.val()).forEach(([k, t]) => {
+            if (k !== exclude.empTxKey) used += getUsedForRef(t, txRef)
         })
     }
 
@@ -79,6 +94,7 @@ const checkTransactionCapacity = async (txRef, newAmount, exclude = {}) => {
     }
 
     const remaining = capacity - used
+    console.log('[checkTransactionCapacity] capacity:', capacity, 'used:', used, 'remaining:', remaining, 'newAmount:', newAmount)
     if (newAmount > remaining + 0.01) {
         throw new Error(
             `Transaction capacity exceeded: ${newAmount.toFixed(2)} requested, ${remaining.toFixed(2)} remaining of ${capacity.toFixed(2)}`,
@@ -326,6 +342,28 @@ export const poslovanjService = {
         await remove(ref(db, `/poslovanje-expenses/${key}`))
     },
 
+    async addExpenseTransactionRef(expenseKey, txRef, { amount, label, bankAccount }) {
+        // Read existing amount for this ref to accumulate
+        const existingSnap = await get(ref(db, `/poslovanje-expenses/${expenseKey}/transactionRefs/${txRef}`))
+        const existingAmount = existingSnap.exists() ? (existingSnap.val().amount || 0) : 0
+        const totalAmount = existingAmount + amount
+        console.log('[addExpenseTransactionRef] expenseKey:', expenseKey, 'txRef:', txRef, 'newAmount:', amount, 'existingAmount:', existingAmount, 'totalAmount:', totalAmount)
+        await checkTransactionCapacity(txRef, amount, { expenseKey })
+        await update(ref(db, `/poslovanje-expenses/${expenseKey}`), {
+            [`transactionRefs/${txRef}`]: { amount: totalAmount, label, bankAccount },
+            transactionRef: null,
+            transactionLabel: null,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async removeExpenseTransactionRef(expenseKey, txRef) {
+        await update(ref(db, `/poslovanje-expenses/${expenseKey}`), {
+            [`transactionRefs/${txRef}`]: null,
+            updatedAt: Date.now(),
+        })
+    },
+
     async addExpenseAttachment(expenseKey, file) {
         const data = await new Promise((resolve, reject) => {
             const reader = new FileReader()
@@ -415,6 +453,27 @@ export const poslovanjService = {
 
     async deleteEmployeeTransaction(key) {
         await remove(ref(db, `/poslovanje-employee-transactions/${key}`))
+    },
+
+    async addEmployeeTransactionRef(txKey, txRef, { amount, label, bankAccount }) {
+        // Read existing amount for this ref to accumulate
+        const existingSnap = await get(ref(db, `/poslovanje-employee-transactions/${txKey}/transactionRefs/${txRef}`))
+        const existingAmount = existingSnap.exists() ? (existingSnap.val().amount || 0) : 0
+        const totalAmount = existingAmount + amount
+        console.log('[addEmployeeTransactionRef] txKey:', txKey, 'txRef:', txRef, 'newAmount:', amount, 'existingAmount:', existingAmount, 'totalAmount:', totalAmount)
+        await update(ref(db, `/poslovanje-employee-transactions/${txKey}`), {
+            [`transactionRefs/${txRef}`]: { amount: totalAmount, label, bankAccount },
+            transactionRef: null,
+            transactionLabel: null,
+            updatedAt: Date.now(),
+        })
+    },
+
+    async removeEmployeeTransactionRef(txKey, txRef) {
+        await update(ref(db, `/poslovanje-employee-transactions/${txKey}`), {
+            [`transactionRefs/${txRef}`]: null,
+            updatedAt: Date.now(),
+        })
     },
 
     async addEmployeeTransactionAttachment(txKey, file) {
@@ -553,6 +612,46 @@ export const poslovanjService = {
                 `/poslovanje-government-expenses/${expenseKey}/attachments/${attachmentKey}`,
             ),
         )
+    },
+
+    // Clear envelope sent tracking
+    async clearEnvelopeSentTracking() {
+        const [invoicesSnap, statementsSnap] = await Promise.all([
+            get(ref(db, '/poslovanje-invoices')),
+            get(ref(db, '/poslovanje-statements')),
+        ])
+
+        const updates = {}
+
+        if (invoicesSnap.exists()) {
+            Object.entries(invoicesSnap.val()).forEach(
+                ([invoiceKey, invoice]) => {
+                    if (!invoice.attachments) return
+                    Object.keys(invoice.attachments).forEach((attKey) => {
+                        if (invoice.attachments[attKey].sendHistory) {
+                            updates[
+                                `/poslovanje-invoices/${invoiceKey}/attachments/${attKey}/sendHistory`
+                            ] = null
+                        }
+                    })
+                },
+            )
+        }
+
+        if (statementsSnap.exists()) {
+            Object.entries(statementsSnap.val()).forEach(([stmtKey, stmt]) => {
+                if (stmt.sendHistory) {
+                    updates[
+                        `/poslovanje-statements/${stmtKey}/sendHistory`
+                    ] = null
+                }
+            })
+        }
+
+        if (Object.keys(updates).length === 0) return 0
+
+        await update(ref(db), updates)
+        return Object.keys(updates).length
     },
 
     // Forex exchanges

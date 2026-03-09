@@ -1,4 +1,4 @@
-import { Layout } from '@/widgets/Layout'
+import { MobileLayout as Layout } from '@/widgets/Layout'
 import { EmployeeList } from '@/widgets/Poslovanje/Employees/ui/EmployeeList'
 
 const EmployeesPage = () => (
