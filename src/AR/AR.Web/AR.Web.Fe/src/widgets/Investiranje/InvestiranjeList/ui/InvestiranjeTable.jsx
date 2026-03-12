@@ -1,5 +1,4 @@
 import { useAuth } from '@/app/context/AuthContext'
-import { firebaseApp } from '@/app/firebase'
 import { investiranjeService } from '@/app/services/investiranjeService'
 import {
     Box,
@@ -20,50 +19,28 @@ import {
     Tooltip,
     Typography,
 } from '@mui/material'
-import { Delete, Edit, PushPin, Warning } from '@mui/icons-material'
-import { get, getDatabase, query, ref } from 'firebase/database'
-import { useEffect, useState, useCallback } from 'react'
+import {
+    Delete,
+    Edit,
+    ExpandMore,
+    ExpandLess,
+    PushPin,
+    Warning,
+} from '@mui/icons-material'
+import { Fragment, useState } from 'react'
 import { toast } from 'react-toastify'
 import { InvestiranjeTableContainerStyled } from '../styled/InvestiranjeTableContainerStyled'
 import { useRouter } from 'next/router'
 import { InvestiranjeEditorModal } from '../../InvestiranjeEditor/ui/InvestiranjeEditorModal'
 
-export const InvestiranjeTable = () => {
+export const InvestiranjeTable = ({ posts, onRefresh }) => {
     const router = useRouter()
     const { isAdmin } = useAuth()
-    const [posts, setPosts] = useState(undefined)
     const [editingPost, setEditingPost] = useState(undefined)
     const [isEditorOpen, setIsEditorOpen] = useState(false)
     const [deletingPost, setDeletingPost] = useState(undefined)
     const [isDeleting, setIsDeleting] = useState(false)
-
-    const fetchPosts = useCallback(() => {
-        const db = getDatabase(firebaseApp)
-        const q = query(ref(db, '/investiranje'))
-
-        get(q)
-            .then((snapshot) => {
-                if (snapshot.exists()) {
-                    const data = snapshot.val()
-                    const postsWithKeys = Object.keys(data)
-                        .filter((key) => data[key] != null)
-                        .map((key) => ({
-                            key,
-                            data: data[key],
-                        }))
-                    setPosts(postsWithKeys)
-                } else {
-                    setPosts([])
-                }
-            })
-            .catch((error) => {
-                console.error(error)
-            })
-    }, [])
-
-    useEffect(() => {
-        fetchPosts()
-    }, [fetchPosts])
+    const [expandedGroups, setExpandedGroups] = useState({})
 
     const handleEdit = (post, e) => {
         e.stopPropagation()
@@ -77,7 +54,7 @@ export const InvestiranjeTable = () => {
     }
 
     const handleSave = () => {
-        fetchPosts()
+        onRefresh()
     }
 
     const handleDeleteClick = (post, e) => {
@@ -92,7 +69,7 @@ export const InvestiranjeTable = () => {
         try {
             await investiranjeService.deletePost(deletingPost.key)
             toast('Članak je uspešno obrisan', { type: 'success' })
-            fetchPosts()
+            onRefresh()
         } catch (error) {
             toast(error.message || 'Greška pri brisanju članka', {
                 type: 'error',
@@ -107,13 +84,81 @@ export const InvestiranjeTable = () => {
         setDeletingPost(undefined)
     }
 
-    const sortedPosts = posts
-        ?.slice()
-        .sort((x, y) => {
+    const toggleGroup = (key) => {
+        setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+    }
+
+    const sortPosts = (list) =>
+        list?.slice().sort((x, y) => {
             if (x.data.isPinned !== y.data.isPinned)
                 return (y.data.isPinned ? 1 : 0) - (x.data.isPinned ? 1 : 0)
+            const xHasOrder = x.data.order != null
+            const yHasOrder = y.data.order != null
+            if (xHasOrder && yHasOrder) return x.data.order - y.data.order
+            if (xHasOrder !== yHasOrder) return xHasOrder ? -1 : 1
             return x.data.date > y.data.date ? -1 : 1
         })
+
+    // Separate top-level and child posts
+    const topLevelPosts = posts?.filter((p) => !p.data.parentKey) ?? []
+    const childrenByParent = {}
+    posts?.forEach((p) => {
+        if (p.data.parentKey) {
+            if (!childrenByParent[p.data.parentKey])
+                childrenByParent[p.data.parentKey] = []
+            childrenByParent[p.data.parentKey].push(p)
+        }
+    })
+    // Sort children within each group
+    Object.keys(childrenByParent).forEach((key) => {
+        childrenByParent[key] = sortPosts(childrenByParent[key])
+    })
+
+    const sortedTopLevel = sortPosts(topLevelPosts)
+
+    const renderAdminActions = (post) =>
+        isAdmin ? (
+            <TableCell align="right">
+                <Box
+                    sx={{
+                        display: 'flex',
+                        gap: 0.5,
+                        justifyContent: 'flex-end',
+                    }}
+                >
+                    <Tooltip title="Uredi članak">
+                        <IconButton
+                            size="small"
+                            onClick={(e) => handleEdit(post, e)}
+                            sx={{
+                                '&:hover': {
+                                    bgcolor: 'primary.main',
+                                    color: 'white',
+                                },
+                                transition: 'all 0.15s ease',
+                            }}
+                        >
+                            <Edit fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Obriši članak">
+                        <IconButton
+                            size="small"
+                            onClick={(e) => handleDeleteClick(post, e)}
+                            sx={{
+                                '&:hover': {
+                                    bgcolor: 'error.main',
+                                    color: 'white',
+                                },
+                                transition: 'all 0.15s ease',
+                            }}
+                        >
+                            <Delete fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+            </TableCell>
+        ) : null
 
     return posts == undefined ? (
         <CircularProgress />
@@ -131,88 +176,150 @@ export const InvestiranjeTable = () => {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {sortedPosts?.map((post) => (
-                            <TableRow
-                                onClick={() => {
-                                    router.push(`/investiranje/${post.data.src}`)
-                                }}
-                                key={post.key}
-                                sx={{
-                                    '&:last-child td, &:last-child th': {
-                                        border: 0,
-                                    },
-                                }}
-                            >
-                                <TableCell component="th" scope="row">
-                                    {post.data.isPinned && (
-                                        <PushPin
+                        {sortedTopLevel?.map((post) => {
+                            const children = childrenByParent[post.key]
+                            const hasChildren = children && children.length > 0
+                            const isExpanded = !!expandedGroups[post.key]
+
+                            return hasChildren ? (
+                                <Fragment key={post.key}>
+                                    <TableRow
+                                        onClick={() =>
+                                            toggleGroup(post.key)
+                                        }
+                                        sx={{
+                                            '&:last-child td, &:last-child th':
+                                                { border: 0 },
+                                            ...(post.data.listingColor && {
+                                                background: `linear-gradient(to right, transparent, ${post.data.listingColor}30)`,
+                                            }),
+                                        }}
+                                    >
+                                        <TableCell
+                                            component="th"
+                                            scope="row"
+                                        >
+                                            <Box
+                                                sx={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                {isExpanded ? (
+                                                    <ExpandLess
+                                                        sx={{
+                                                            fontSize: '1.2em',
+                                                            mr: 1,
+                                                            color: 'text.secondary',
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <ExpandMore
+                                                        sx={{
+                                                            fontSize: '1.2em',
+                                                            mr: 1,
+                                                            color: 'text.secondary',
+                                                        }}
+                                                    />
+                                                )}
+                                                {post.data.isPinned && (
+                                                    <PushPin
+                                                        sx={{
+                                                            fontSize: '1em',
+                                                            transform:
+                                                                'translateY(3px)',
+                                                            marginRight: 1,
+                                                        }}
+                                                    />
+                                                )}
+                                                {post.data.title}
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {post.data.date}
+                                        </TableCell>
+                                        {renderAdminActions(post)}
+                                    </TableRow>
+                                    {children.map((child) => (
+                                        <TableRow
+                                            key={child.key}
+                                            onClick={() =>
+                                                router.push(
+                                                    `/investiranje/${child.data.src}`
+                                                )
+                                            }
                                             sx={{
-                                                fontSize: `1em`,
-                                                transform: `translateY(3px)`,
-                                                marginRight: 1,
-                                            }}
-                                        />
-                                    )}
-                                    {post.data.title}
-                                </TableCell>
-                                <TableCell align="right">
-                                    {post.data.date}
-                                </TableCell>
-                                {isAdmin && (
-                                    <TableCell align="right">
-                                        <Box
-                                            sx={{
-                                                display: 'flex',
-                                                gap: 0.5,
-                                                justifyContent: 'flex-end',
+                                                display: isExpanded
+                                                    ? 'table-row'
+                                                    : 'none',
+                                                ...((child.data.listingColor || post.data.listingColor)
+                                                    ? {
+                                                          background: `linear-gradient(to right, transparent, ${child.data.listingColor || post.data.listingColor}30)`,
+                                                      }
+                                                    : {
+                                                          bgcolor: (theme) =>
+                                                              theme.palette.mode ===
+                                                              'dark'
+                                                                  ? 'rgba(255,255,255,0.06)'
+                                                                  : 'rgba(0,0,0,0.04)',
+                                                      }),
+                                                borderLeft: (theme) =>
+                                                    `3px solid ${theme.palette.primary.main}`,
+                                                '&:last-child td, &:last-child th':
+                                                    { border: 0 },
                                             }}
                                         >
-                                            <Tooltip title="Uredi članak">
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) =>
-                                                        handleEdit(post, e)
-                                                    }
-                                                    sx={{
-                                                        '&:hover': {
-                                                            bgcolor:
-                                                                'primary.main',
-                                                            color: 'white',
-                                                        },
-                                                        transition:
-                                                            'all 0.15s ease',
-                                                    }}
-                                                >
-                                                    <Edit fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Obriši članak">
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) =>
-                                                        handleDeleteClick(
-                                                            post,
-                                                            e
-                                                        )
-                                                    }
-                                                    sx={{
-                                                        '&:hover': {
-                                                            bgcolor:
-                                                                'error.main',
-                                                            color: 'white',
-                                                        },
-                                                        transition:
-                                                            'all 0.15s ease',
-                                                    }}
-                                                >
-                                                    <Delete fontSize="small" />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </Box>
+                                            <TableCell
+                                                component="th"
+                                                scope="row"
+                                                sx={{ pl: 6 }}
+                                            >
+                                                {child.data.title}
+                                            </TableCell>
+                                            <TableCell align="right">
+                                                {child.data.date}
+                                            </TableCell>
+                                            {renderAdminActions(child)}
+                                        </TableRow>
+                                    ))}
+                                </Fragment>
+                            ) : (
+                                <TableRow
+                                    onClick={() =>
+                                        router.push(
+                                            `/investiranje/${post.data.src}`
+                                        )
+                                    }
+                                    key={post.key}
+                                    sx={{
+                                        '&:last-child td, &:last-child th': {
+                                            border: 0,
+                                        },
+                                        ...(post.data.listingColor && {
+                                            background: `linear-gradient(to right, transparent, ${post.data.listingColor}30)`,
+                                        }),
+                                    }}
+                                >
+                                    <TableCell component="th" scope="row">
+                                        {post.data.isPinned && (
+                                            <PushPin
+                                                sx={{
+                                                    fontSize: '1em',
+                                                    transform:
+                                                        'translateY(3px)',
+                                                    marginRight: 1,
+                                                }}
+                                            />
+                                        )}
+                                        {post.data.title}
                                     </TableCell>
-                                )}
-                            </TableRow>
-                        ))}
+                                    <TableCell align="right">
+                                        {post.data.date}
+                                    </TableCell>
+                                    {renderAdminActions(post)}
+                                </TableRow>
+                            )
+                        })}
                     </TableBody>
                 </Table>
             </InvestiranjeTableContainerStyled>
@@ -223,6 +330,7 @@ export const InvestiranjeTable = () => {
                 onSave={handleSave}
                 initialData={editingPost}
                 mode="edit"
+                allPosts={posts ?? []}
             />
 
             <Dialog

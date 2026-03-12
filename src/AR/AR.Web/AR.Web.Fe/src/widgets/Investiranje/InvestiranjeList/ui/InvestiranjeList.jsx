@@ -1,7 +1,9 @@
 import { useAuth } from '@/app/context/AuthContext'
+import { firebaseApp } from '@/app/firebase'
 import { Box, Button, Grid, Typography } from '@mui/material'
 import { Add } from '@mui/icons-material'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { get, getDatabase, query, ref } from 'firebase/database'
 import { AuthButton } from '@/widgets/Auth'
 import { InvestiranjeTable } from './InvestiranjeTable'
 import { InvestiranjeEditorModal } from '../../InvestiranjeEditor/ui/InvestiranjeEditorModal'
@@ -10,10 +12,38 @@ import { PortfolioSection } from '../../Portfolio/ui/PortfolioSection'
 export const InvestiranjeList = () => {
     const { isAdmin } = useAuth()
     const [isCreateOpen, setIsCreateOpen] = useState(false)
-    const [refreshKey, setRefreshKey] = useState(0)
+    const [posts, setPosts] = useState(undefined)
+
+    const fetchPosts = useCallback(() => {
+        const db = getDatabase(firebaseApp)
+        const q = query(ref(db, '/investiranje'))
+
+        get(q)
+            .then((snapshot) => {
+                if (snapshot.exists()) {
+                    const data = snapshot.val()
+                    const postsWithKeys = Object.keys(data)
+                        .filter((key) => data[key] != null)
+                        .map((key) => ({
+                            key,
+                            data: data[key],
+                        }))
+                    setPosts(postsWithKeys)
+                } else {
+                    setPosts([])
+                }
+            })
+            .catch((error) => {
+                console.error(error)
+            })
+    }, [])
+
+    useEffect(() => {
+        fetchPosts()
+    }, [fetchPosts])
 
     const handleSave = () => {
-        setRefreshKey((prev) => prev + 1)
+        fetchPosts()
     }
 
     return (
@@ -89,7 +119,10 @@ export const InvestiranjeList = () => {
                             </Button>
                         </Grid>
                     )}
-                    <InvestiranjeTable key={refreshKey} />
+                    <InvestiranjeTable
+                        posts={posts}
+                        onRefresh={fetchPosts}
+                    />
                 </Grid>
             </Grid>
 
@@ -98,6 +131,7 @@ export const InvestiranjeList = () => {
                 onClose={() => setIsCreateOpen(false)}
                 onSave={handleSave}
                 mode="create"
+                allPosts={posts ?? []}
             />
         </Grid>
     )

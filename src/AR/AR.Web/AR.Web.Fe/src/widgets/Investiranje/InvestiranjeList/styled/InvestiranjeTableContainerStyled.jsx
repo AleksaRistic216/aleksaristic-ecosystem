@@ -34,7 +34,11 @@ export const InvestiranjeTableContainerStyled = styled(TableContainer)(
 
         tbody > tr:hover {
             background-color: ${theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.primary.main + '08'};
-            transform: translateX(4px);
+        }
+
+        tbody > tr:hover td:first-of-type,
+        tbody > tr:hover th:first-of-type {
+            padding-left: 28px;
         }
 
         tbody > tr:hover th {

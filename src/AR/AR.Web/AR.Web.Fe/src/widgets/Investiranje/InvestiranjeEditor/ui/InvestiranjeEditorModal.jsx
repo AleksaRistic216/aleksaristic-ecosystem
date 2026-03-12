@@ -1,5 +1,6 @@
 import { investiranjeService } from '@/app/services/investiranjeService'
 import {
+    Autocomplete,
     Box,
     Button,
     Chip,
@@ -15,7 +16,7 @@ import {
     TextField,
     Typography,
 } from '@mui/material'
-import { Close, Edit, Add } from '@mui/icons-material'
+import { Close, Edit, Add, Delete } from '@mui/icons-material'
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import { marked } from 'marked'
@@ -45,14 +46,25 @@ export const InvestiranjeEditorModal = ({
     onSave,
     initialData,
     mode,
+    allPosts = [],
 }) => {
     const [title, setTitle] = useState('')
     const [date, setDate] = useState(getTodayDate())
     const [src, setSrc] = useState('')
     const [markdown, setMarkdown] = useState('')
     const [isPinned, setIsPinned] = useState(false)
+    const [parentKey, setParentKey] = useState(null)
+    const [order, setOrder] = useState('')
+    const [notes, setNotes] = useState([])
+    const [inheritParentNotes, setInheritParentNotes] = useState(true)
+    const [listingColor, setListingColor] = useState('')
     const [loading, setLoading] = useState(false)
     const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+
+    // Filter out current post and child posts from parent options
+    const parentOptions = allPosts.filter(
+        (p) => p.key !== initialData?.key && !p.data.parentKey
+    )
 
     useEffect(() => {
         if (isOpen && initialData && mode === 'edit') {
@@ -61,6 +73,11 @@ export const InvestiranjeEditorModal = ({
             setSrc(initialData.data.src)
             setIsPinned(initialData.data.isPinned || false)
             setMarkdown(initialData.data.text || '')
+            setParentKey(initialData.data.parentKey || null)
+            setOrder(initialData.data.order != null ? String(initialData.data.order) : '')
+            setNotes(initialData.data.notes || [])
+            setInheritParentNotes(initialData.data.inheritParentNotes !== false)
+            setListingColor(initialData.data.listingColor || '')
             setSlugManuallyEdited(true)
         } else if (isOpen && mode === 'create') {
             setTitle('')
@@ -68,6 +85,11 @@ export const InvestiranjeEditorModal = ({
             setSrc('')
             setMarkdown('')
             setIsPinned(false)
+            setParentKey(null)
+            setOrder('')
+            setNotes([])
+            setInheritParentNotes(true)
+            setListingColor('')
             setSlugManuallyEdited(false)
         }
     }, [isOpen, initialData, mode])
@@ -121,6 +143,11 @@ export const InvestiranjeEditorModal = ({
                 src: src.trim(),
                 text: htmlContent,
                 isPinned,
+                parentKey: parentKey || null,
+                order: order !== '' ? Number(order) : null,
+                notes: notes.filter((n) => n.trim()),
+                inheritParentNotes,
+                listingColor: listingColor || null,
             }
 
             if (mode === 'create') {
@@ -260,6 +287,84 @@ export const InvestiranjeEditorModal = ({
                             labelPlacement="start"
                         />
                     </Grid>
+                    <Grid item xs={12} md={3}>
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1.5,
+                                border: 1,
+                                borderColor: 'divider',
+                                borderRadius: 1,
+                                px: 2,
+                                py: 1.15,
+                                height: '100%',
+                            }}
+                        >
+                            <Typography variant="body2" sx={{ flexShrink: 0 }}>
+                                Boja u listi
+                            </Typography>
+                            <input
+                                type="color"
+                                value={listingColor || '#ffffff'}
+                                onChange={(e) =>
+                                    setListingColor(e.target.value)
+                                }
+                                disabled={loading}
+                                style={{
+                                    width: 32,
+                                    height: 32,
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    background: 'transparent',
+                                }}
+                            />
+                            {listingColor && (
+                                <IconButton
+                                    size="small"
+                                    onClick={() => setListingColor('')}
+                                    disabled={loading}
+                                >
+                                    <Close fontSize="small" />
+                                </IconButton>
+                            )}
+                        </Box>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <Autocomplete
+                            options={parentOptions}
+                            getOptionLabel={(option) => option.data.title}
+                            value={
+                                parentOptions.find(
+                                    (p) => p.key === parentKey
+                                ) || null
+                            }
+                            onChange={(_, newValue) =>
+                                setParentKey(newValue?.key || null)
+                            }
+                            disabled={loading}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    label="Nadređeni članak (opciono)"
+                                    size="medium"
+                                />
+                            )}
+                        />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <TextField
+                            label="Redosled u grupi"
+                            fullWidth
+                            value={order}
+                            onChange={(e) => setOrder(e.target.value)}
+                            disabled={loading}
+                            type="number"
+                            helperText="Manji broj = ranije u listi"
+                            size="medium"
+                        />
+                    </Grid>
                     <Grid item xs={12}>
                         <TextField
                             label="URL Slug"
@@ -277,6 +382,97 @@ export const InvestiranjeEditorModal = ({
                                 </Typography>
                             }
                             size="medium"
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                mb: 1,
+                            }}
+                        >
+                            <Typography
+                                variant="subtitle2"
+                                color="text.secondary"
+                            >
+                                Napomene
+                            </Typography>
+                            <Button
+                                size="small"
+                                startIcon={<Add />}
+                                onClick={() => setNotes([...notes, ''])}
+                                disabled={loading}
+                                sx={{ textTransform: 'none' }}
+                            >
+                                Dodaj napomenu
+                            </Button>
+                        </Box>
+                        {notes.map((note, index) => (
+                            <Box
+                                key={index}
+                                sx={{
+                                    display: 'flex',
+                                    gap: 1,
+                                    mb: 1,
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    value={note}
+                                    onChange={(e) => {
+                                        const updated = [...notes]
+                                        updated[index] = e.target.value
+                                        setNotes(updated)
+                                    }}
+                                    disabled={loading}
+                                    placeholder={`Napomena ${index + 1}`}
+                                />
+                                <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                        setNotes(
+                                            notes.filter(
+                                                (_, i) => i !== index
+                                            )
+                                        )
+                                    }
+                                    disabled={loading}
+                                    sx={{
+                                        '&:hover': {
+                                            bgcolor: 'error.main',
+                                            color: 'white',
+                                        },
+                                        transition: 'all 0.15s ease',
+                                    }}
+                                >
+                                    <Delete fontSize="small" />
+                                </IconButton>
+                            </Box>
+                        ))}
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={inheritParentNotes}
+                                    onChange={(e) =>
+                                        setInheritParentNotes(
+                                            e.target.checked
+                                        )
+                                    }
+                                    disabled={loading}
+                                    color="primary"
+                                    size="small"
+                                />
+                            }
+                            label={
+                                <Typography variant="body2">
+                                    Nasleđuj napomene od nadređenog članka
+                                </Typography>
+                            }
+                            sx={{ mt: notes.length > 0 ? 0.5 : 0 }}
                         />
                     </Grid>
                     <Grid item xs={12}>

@@ -50,4 +50,11 @@ export const investiranjeService = {
         if (!existingKey) return true
         return excludeKey === existingKey
     },
+
+    async uploadImage(base64Data, fileName) {
+        const imagesRef = ref(db, '/investiranje-images')
+        const newImageRef = push(imagesRef)
+        await set(newImageRef, { data: base64Data, fileName })
+        return newImageRef.key
+    },
 }
