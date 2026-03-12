@@ -62,6 +62,13 @@ export const InvestiranjeEditorModal = ({
     const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
 
     // Filter out current post and child posts from parent options
+    const childCountByParent = {}
+    allPosts.forEach((p) => {
+        if (p.data.parentKey) {
+            childCountByParent[p.data.parentKey] =
+                (childCountByParent[p.data.parentKey] || 0) + 1
+        }
+    })
     const parentOptions = allPosts.filter(
         (p) => p.key !== initialData?.key && !p.data.parentKey
     )
@@ -334,7 +341,10 @@ export const InvestiranjeEditorModal = ({
                     <Grid item xs={12} md={6}>
                         <Autocomplete
                             options={parentOptions}
-                            getOptionLabel={(option) => option.data.title}
+                            getOptionLabel={(option) => {
+                                const count = childCountByParent[option.key] || 0
+                                return `${option.data.title} (${count})`
+                            }}
                             value={
                                 parentOptions.find(
                                     (p) => p.key === parentKey
