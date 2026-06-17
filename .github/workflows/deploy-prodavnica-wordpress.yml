@@ -1,0 +1,33 @@
+name: Deploy prodavnica WordPress + WooCommerce to cluster
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-wordpress:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set K8s context
+      uses: ossrs/k8s-set-context-action@v1
+      with:
+        kubeconfig: '${{ secrets.KUBE_CONFIG_PURE }}'
+
+    - name: Deploy prodavnica WordPress stack
+      env:
+        PRODAVNICA_DB_ROOT_PASSWORD: ${{ secrets.PRODAVNICA_DB_ROOT_PASSWORD }}
+        PRODAVNICA_DB_PASSWORD: ${{ secrets.PRODAVNICA_DB_PASSWORD }}
+      run: |-
+        envsubst < k8s/wordpress/mariadb-secret.yaml | kubectl apply -f -
+        envsubst < k8s/wordpress/wordpress-secret.yaml | kubectl apply -f -
+        kubectl apply -f k8s/wordpress/mariadb-pvc.yaml
+        kubectl apply -f k8s/wordpress/wordpress-pvc.yaml
+        kubectl apply -f k8s/wordpress/mariadb-deployment.yaml
+        kubectl apply -f k8s/wordpress/mariadb-service.yaml
+        kubectl apply -f k8s/wordpress/wordpress-deployment.yaml
+        kubectl apply -f k8s/wordpress/wordpress-service.yaml
+        kubectl apply -f k8s/wordpress/wordpress-ingress.yaml
+        kubectl rollout status -n ar-web-namespace deployment prodavnica-mariadb-deployment --timeout=180s
+        kubectl rollout status -n ar-web-namespace deployment prodavnica-wordpress-deployment --timeout=300s

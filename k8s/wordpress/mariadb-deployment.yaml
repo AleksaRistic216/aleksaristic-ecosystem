@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prodavnica-mariadb-deployment
+  namespace: ar-web-namespace
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prodavnica-mariadb
+  template:
+    metadata:
+      labels:
+        app: prodavnica-mariadb
+    spec:
+      containers:
+      - name: mariadb
+        image: mariadb:11.4
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: prodavnica-mariadb-secret
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mariadb-data
+          mountPath: /var/lib/mysql
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1024Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2048Mi"
+        livenessProbe:
+          exec:
+            command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: mariadb-data
+        persistentVolumeClaim:
+          claimName: prodavnica-mariadb-pvc
+      imagePullSecrets:
+      - name: regcred

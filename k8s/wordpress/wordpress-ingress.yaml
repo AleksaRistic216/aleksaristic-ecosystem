@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prodavnica-wordpress-ingress
+  namespace: ar-web-namespace
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+spec:
+  tls:
+    - hosts:
+        - prodavnica.aleksaristic.com
+      secretName: aleksaristic-tls
+  rules:
+  - host: prodavnica.aleksaristic.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prodavnica-wordpress-service
+            port:
+              number: 80

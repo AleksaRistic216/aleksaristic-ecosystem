@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prodavnica-wordpress-deployment
+  namespace: ar-web-namespace
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prodavnica-wordpress
+  template:
+    metadata:
+      labels:
+        app: prodavnica-wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:6-php8.3-apache
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - secretRef:
+            name: prodavnica-wordpress-secret
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: wordpress-data
+          mountPath: /var/www/html
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2048Mi"
+        livenessProbe:
+          httpGet:
+            path: /wp-login.php
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /wp-login.php
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: wordpress-data
+        persistentVolumeClaim:
+          claimName: prodavnica-wordpress-pvc
+      imagePullSecrets:
+      - name: regcred
